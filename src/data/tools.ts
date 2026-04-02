@@ -19,6 +19,16 @@ export const tools: Tool[] = [
     category: "law",
     tags: ["Property Law", "MBE", "思维导图"],
   },
+  {
+    id: "chinese-literacy",
+    title: "中文识字",
+    description:
+      "学龄前儿童中文识字学习工具，包含学习模式（字卡朗读）和测验模式（听音辨字），支持分组学习和进度跟踪。",
+    href: "/chinese-literacy",
+    icon: "📖",
+    category: "kids",
+    tags: ["识字", "学龄前", "听音辨字"],
+  },
 ];
 
 export const categoryLabels: Record<Tool["category"], string> = {
