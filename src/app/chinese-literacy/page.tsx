@@ -24,78 +24,109 @@ let _voiceResolved = false;
 function getBestChineseVoice(): SpeechSynthesisVoice | null {
   if (_voiceResolved) return _cachedVoice;
   const voices = window.speechSynthesis.getVoices();
-  if (voices.length === 0) return null; // not loaded yet
+  if (voices.length === 0) return null;
   const zhVoices = voices.filter((v) => v.lang.startsWith("zh"));
   for (const pref of VOICE_PRIORITY) {
     const match = zhVoices.find((v) => v.name.includes(pref));
     if (match) { _cachedVoice = match; _voiceResolved = true; return match; }
   }
-  // Fallback: any zh-CN voice, then any zh voice
   _cachedVoice = zhVoices.find((v) => v.lang === "zh-CN") ?? zhVoices[0] ?? null;
   _voiceResolved = true;
   return _cachedVoice;
 }
 
-function speak(text: string) {
-  if (typeof window === "undefined" || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "zh-CN";
-  u.rate = 0.78;
-  const voice = getBestChineseVoice();
-  if (voice) u.voice = voice;
-  window.speechSynthesis.speak(u);
+/* ── Global abort / cancel state ── */
+let _abortId = 0;
+
+/** Stop ALL ongoing TTS immediately */
+function stopAll() {
+  _abortId++;
+  if (typeof window !== "undefined" && window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
 }
 
-/** Play an audio file, returns a promise that resolves when playback ends */
-function playAudio(src: string): Promise<void> {
-  return new Promise((resolve) => {
-    const audio = new Audio(src);
-    audio.onended = () => resolve();
-    audio.onerror = () => resolve(); // fallback: don't block on error
-    audio.play().catch(() => resolve());
+/** Get a configured utterance with best Chinese voice */
+function makeUtterance(text: string): SpeechSynthesisUtterance | null {
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
+  const voice = getBestChineseVoice();
+  if (!voice) {
+    console.warn("[TTS] No Chinese voice available – skipping speech for:", text);
+    return null;
+  }
+  const u = new SpeechSynthesisUtterance(text);
+  u.voice = voice;        // set voice FIRST
+  u.lang = voice.lang;    // match voice's actual lang tag (zh-CN / zh-TW etc.)
+  u.rate = 0.78;
+  return u;
+}
+
+function speak(text: string) {
+  stopAll();
+  // Create utterance INSIDE setTimeout — after cancel() has fully processed,
+  // some browsers otherwise ignore the voice setting and fall back to English.
+  setTimeout(() => {
+    const u = makeUtterance(text);
+    if (!u) return;
+    window.speechSynthesis.speak(u);
+  }, 100);
+}
+
+function wait(ms: number, abortId: number): Promise<void> {
+  return new Promise((r) => {
+    if (abortId !== _abortId) { r(); return; }
+    setTimeout(r, ms);
   });
 }
 
-/** Small delay helper */
-function wait(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+/** Speak TTS and wait for it to finish, aborts if stopAll() called */
+function speakAndWait(text: string, abortId: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (abortId !== _abortId) { resolve(); return; }
+    // Small delay so any recent cancel() has fully processed
+    setTimeout(() => {
+      if (abortId !== _abortId) { resolve(); return; }
+      const u = makeUtterance(text);
+      if (!u) { resolve(); return; }
+      u.onend = () => resolve();
+      u.onerror = () => resolve();
+      window.speechSynthesis.speak(u);
+    }, 80);
+  });
 }
 
 /**
  * Read all readings of a char.
- * Single reading (no audio): TTS "山，，山上，，大山"
- * Polyphonic (with audio):   play audio "了(le)" → TTS "好了，来了" → pause →
- *                             play audio "了(liǎo)" → TTS "了解，了不起"
+ * Single reading: TTS "山，，山上，，大山"
+ * Polyphonic:     TTS each reading's words sequentially with pauses.
+ *                 Context words naturally disambiguate pronunciation
+ *                 (e.g. "大夫" reads dài fu, "大小" reads dà xiǎo).
  */
 async function speakChar(item: CharItem) {
+  stopAll(); // cancel anything currently playing
+  const myId = _abortId; // capture current abort id
+
   if (item.readings.length === 1) {
     const r = item.readings[0];
-    speak(`${item.char}，，${r.words.join("，，")}`);
+    const text = `${item.char}，，${r.words.join("，，")}`;
+    // Wait for cancel() to fully process, then speak directly
+    // (Don't call speak() — that would call stopAll() again, double-cancelling)
+    await wait(100, myId);
+    if (myId !== _abortId) return;
+    const u = makeUtterance(text);
+    if (!u) return;
+    window.speechSynthesis.speak(u);
     return;
   }
 
-  // Polyphonic: play pre-recorded audio per reading, then TTS words
+  // Polyphonic: speak each reading's context words sequentially.
+  // The context words naturally give the correct pronunciation.
   for (let i = 0; i < item.readings.length; i++) {
+    if (myId !== _abortId) return; // aborted
     const r = item.readings[i];
-    if (i > 0) await wait(500); // pause between readings
-    if (r.audio) {
-      await playAudio(r.audio);
-      await wait(300);
-    }
-    // TTS the words for this reading
-    await new Promise<void>((resolve) => {
-      if (typeof window === "undefined" || !window.speechSynthesis) { resolve(); return; }
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(r.words.join("，，"));
-      u.lang = "zh-CN";
-      u.rate = 0.78;
-      const voice = getBestChineseVoice();
-      if (voice) u.voice = voice;
-      u.onend = () => resolve();
-      u.onerror = () => resolve();
-      window.speechSynthesis.speak(u);
-    });
+    if (i > 0) await wait(600, myId);
+    if (myId !== _abortId) return;
+    await speakAndWait(r.words.join("，，"), myId);
   }
 }
 
@@ -137,12 +168,38 @@ function saveProgress(set: Set<string>) {
   localStorage.setItem(PROGRESS_KEY, JSON.stringify([...set]));
 }
 
+/* ─── Minecraft-style emoji block ─── */
+
+function PixelEmoji({ emoji, size = "md" }: { emoji: string; size?: "sm" | "md" | "lg" }) {
+  const sizeMap = { sm: 40, md: 56, lg: 80 };
+  const dim = sizeMap[size];
+  const bw = size === "sm" ? 2 : 3;
+  const ts = { sm: "text-xl", md: "text-2xl", lg: "text-4xl" };
+  return (
+    <span
+      className="inline-flex items-center justify-center rounded-sm bg-gradient-to-br from-emerald-800 to-emerald-950 shadow-[inset_0_0_8px_rgba(0,0,0,0.3)]"
+      style={{
+        width: dim,
+        height: dim,
+        borderWidth: bw,
+        borderStyle: "solid",
+        borderColor: "#065f46 #022c22 #022c22 #065f46",
+        imageRendering: "pixelated",
+      }}
+    >
+      <span className={`${ts[size]} drop-shadow-[0_2px_1px_rgba(0,0,0,0.5)]`}>{emoji}</span>
+    </span>
+  );
+}
+
 /* ─── CharCard (shared) ─── */
 
 function CharCard({ item, compact = false }: { item: CharItem; compact?: boolean }) {
   return (
     <div className={`flex flex-col items-center ${compact ? "gap-1" : "gap-2 sm:gap-3"}`}>
-      <span className={compact ? "text-3xl" : "text-5xl sm:text-6xl"}>{item.emoji}</span>
+      <div className="flex gap-2">
+        {item.readings.map((r, i) => <PixelEmoji key={i} emoji={r.emoji} size={compact ? "sm" : "lg"} />)}
+      </div>
 
       {/* Pinyin: show all readings */}
       <div className={`flex flex-wrap justify-center gap-x-2 text-slate-500 font-medium ${compact ? "text-sm" : "text-lg sm:text-xl"}`}>
@@ -298,6 +355,8 @@ function LearnMode({ onBack }: { onBack: () => void }) {
 
 interface QuizQuestion {
   correct: CharItem;
+  /** Which reading is being tested (index into correct.readings[]) */
+  readingIdx: number;
   options: CharItem[];
 }
 
@@ -307,19 +366,43 @@ interface QuizAnswer {
   isCorrect: boolean;
 }
 
+/** Pool entry: one entry per reading per char */
+interface PoolEntry {
+  item: CharItem;
+  readingIdx: number;
+}
+
 function generateQuiz(groupIds: string[], count: number): QuizQuestion[] {
-  const pool = allChars.filter((c) => groupIds.includes(c.groupId));
+  const chars = allChars.filter((c) => groupIds.includes(c.groupId));
+  // Expand: each reading of each char is a separate pool entry
+  const pool: PoolEntry[] = chars.flatMap((item) =>
+    item.readings.map((_, ri) => ({ item, readingIdx: ri }))
+  );
   const picked = shuffle(pool).slice(0, count);
-  return picked.map((correct) => {
-    // Pick 3 distractors, prefer same group
-    const sameGroup = pool.filter((c) => c.char !== correct.char && c.groupId === correct.groupId);
-    const otherGroup = pool.filter((c) => c.char !== correct.char && c.groupId !== correct.groupId);
+  const questions = picked.map((entry) => {
+    // Pick 3 distractors (different chars)
+    const sameGroup = chars.filter((c) => c.char !== entry.item.char && c.groupId === entry.item.groupId);
+    const otherGroup = chars.filter((c) => c.char !== entry.item.char && c.groupId !== entry.item.groupId);
     const distractors = shuffle([...sameGroup, ...otherGroup]).slice(0, 3);
     return {
-      correct,
-      options: shuffle([correct, ...distractors]),
+      correct: entry.item,
+      readingIdx: entry.readingIdx,
+      options: shuffle([entry.item, ...distractors]),
     };
   });
+  // Ensure same char doesn't appear in consecutive questions
+  for (let i = 1; i < questions.length; i++) {
+    if (questions[i].correct.char === questions[i - 1].correct.char) {
+      // Find a later question with a different char and swap
+      for (let j = i + 1; j < questions.length; j++) {
+        if (questions[j].correct.char !== questions[i - 1].correct.char) {
+          [questions[i], questions[j]] = [questions[j], questions[i]];
+          break;
+        }
+      }
+    }
+  }
+  return questions;
 }
 
 /* ─── Quiz Settings ─── */
@@ -418,20 +501,24 @@ function QuizPlay({
   const hasSpoken = useRef(false);
 
   const q = questions[qIdx];
+  const reading = q.correct.readings[q.readingIdx];
+  const isPolyphonic = q.correct.readings.length > 1;
+  /** What to play: bare char for single-reading, context word for polyphonic */
+  const promptText = isPolyphonic ? reading.words[0] : q.correct.char;
   const isCorrect = selected === q.correct.char;
   const answered = selected !== null;
 
-  // Auto-speak the correct character when question loads
+  // Auto-speak the prompt when question loads
   useEffect(() => {
     hasSpoken.current = false;
     const timer = setTimeout(() => {
       if (!hasSpoken.current) {
-        speak(q.correct.char);
+        speak(promptText);
         hasSpoken.current = true;
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [qIdx, q.correct.char]);
+  }, [qIdx, promptText]);
 
   const handleSelect = (char: string) => {
     if (answered) return;
@@ -441,21 +528,17 @@ function QuizPlay({
     setAnswers((prev) => [...prev, answer]);
 
     if (correct) {
-      // Auto-speak full card, then advance
-      setTimeout(async () => {
-        await speakChar(q.correct);
-        await wait(500);
-        if (qIdx < questions.length - 1) {
-          setSelected(null);
-          setQIdx((i) => i + 1);
-        } else {
-          onFinish([...answers, answer]);
-        }
-      }, 300);
+      // Speak: polyphonic → words only; single → char + words
+      const words = q.correct.readings[q.readingIdx].words;
+      const text = q.correct.readings.length > 1
+        ? words.join("，，")
+        : `${q.correct.char}，，${words.join("，，")}`;
+      setTimeout(() => speak(text), 300);
     }
   };
 
   const handleNext = () => {
+    stopAll(); // stop any ongoing speech before advancing
     if (qIdx < questions.length - 1) {
       setSelected(null);
       setQIdx((i) => i + 1);
@@ -482,11 +565,12 @@ function QuizPlay({
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 gap-6">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 gap-6 overflow-y-auto">
         <p className="text-slate-500 font-medium text-base">听一听，选一选 👂</p>
+        <p className="text-xs text-slate-400 -mt-4">{isPolyphonic ? "听词语，找出对应的字" : "听发音，找出对应的字"}</p>
 
         <button
-          onClick={() => speak(q.correct.char)}
+          onClick={() => speak(promptText)}
           className="w-20 h-20 rounded-full bg-indigo-100 flex items-center justify-center hover:bg-indigo-200 active:scale-95 transition-all"
         >
           <Volume2 className="w-10 h-10 text-indigo-600" />
@@ -529,22 +613,37 @@ function QuizPlay({
                 </div>
               ) : (
                 <div className="flex items-center justify-center gap-2 text-rose-500 font-bold text-lg mb-3">
-                  <XIcon className="w-5 h-5" /> 再想想，正确答案是「{q.correct.char}」
+                  <XIcon className="w-5 h-5" /> {isPolyphonic ? `「${promptText}」的「${q.correct.char}」` : `正确答案是「${q.correct.char}」`}
                 </div>
               )}
 
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-                <CharCard item={q.correct} compact />
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col items-center gap-2">
+                <PixelEmoji emoji={reading.emoji} size="md" />
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold text-slate-800">{q.correct.char}</span>
+                  <span className="text-slate-400 text-sm font-mono">{reading.pinyin}</span>
+                </div>
+                <div className="flex gap-2 text-indigo-600 font-medium text-lg">
+                  {reading.words.map((w, i) => <span key={i}>{w}</span>)}
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); speak(isPolyphonic ? reading.words.join("，，") : `${q.correct.char}，，${reading.words.join("，，")}`); }}
+                  className="mt-1 flex items-center gap-1.5 bg-indigo-500 text-white rounded-full px-4 py-1.5 text-sm hover:bg-indigo-600 active:scale-95 transition-all"
+                >
+                  <Volume2 className="w-4 h-4" /> 朗读
+                </button>
               </div>
 
-              {!isCorrect && (
-                <button
-                  onClick={handleNext}
-                  className="mt-4 w-full py-3 rounded-xl bg-indigo-500 text-white font-bold text-base hover:bg-indigo-600 active:scale-[0.98] transition-all"
-                >
-                  {qIdx < questions.length - 1 ? "下一题 →" : "查看结果"}
-                </button>
-              )}
+              <button
+                onClick={handleNext}
+                className={`mt-4 w-full py-3 rounded-xl font-bold text-base active:scale-[0.98] transition-all ${
+                  isCorrect
+                    ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                    : "bg-indigo-500 text-white hover:bg-indigo-600"
+                }`}
+              >
+                {qIdx < questions.length - 1 ? "下一题 →" : "查看结果"}
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
