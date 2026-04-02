@@ -421,7 +421,7 @@ function QuizSettings({ onStart, onBack }: { onStart: (groupIds: string[], count
   };
 
   const maxCount = allChars.filter((c) => selected.has(c.groupId)).length;
-  const counts = [5, 10, 15, 20];
+  const counts = [5, 10, 15, 20, 30, 50];
 
   return (
     <div className="flex flex-col h-full">
@@ -434,12 +434,12 @@ function QuizSettings({ onStart, onBack }: { onStart: (groupIds: string[], count
 
       <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 sm:py-10 max-w-lg mx-auto w-full">
         <h2 className="font-bold text-slate-700 mb-3">选择出题范围</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-8">
           {charGroups.map((g) => (
             <button
               key={g.id}
               onClick={() => toggle(g.id)}
-              className={`px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
+              className={`px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
                 selected.has(g.id)
                   ? "border-indigo-500 bg-indigo-50 text-indigo-700"
                   : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
