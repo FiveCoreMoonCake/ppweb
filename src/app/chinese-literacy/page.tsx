@@ -47,21 +47,55 @@ function speak(text: string) {
   window.speechSynthesis.speak(u);
 }
 
+/** Play an audio file, returns a promise that resolves when playback ends */
+function playAudio(src: string): Promise<void> {
+  return new Promise((resolve) => {
+    const audio = new Audio(src);
+    audio.onended = () => resolve();
+    audio.onerror = () => resolve(); // fallback: don't block on error
+    audio.play().catch(() => resolve());
+  });
+}
+
+/** Small delay helper */
+function wait(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 /**
- * Read all readings of a char with natural pauses.
- * Single reading:  "山，，山上，，大山"
- * Polyphonic:      "好了，，来了，，，了解，，了不起"
- *   (skip standalone char for polyphonic to avoid TTS picking wrong tone)
+ * Read all readings of a char.
+ * Single reading (no audio): TTS "山，，山上，，大山"
+ * Polyphonic (with audio):   play audio "了(le)" → TTS "好了，来了" → pause →
+ *                             play audio "了(liǎo)" → TTS "了解，了不起"
  */
-function speakChar(item: CharItem) {
+async function speakChar(item: CharItem) {
   if (item.readings.length === 1) {
-    // Single reading: char + words
     const r = item.readings[0];
     speak(`${item.char}，，${r.words.join("，，")}`);
-  } else {
-    // Polyphonic: just read words grouped by reading, longer pause between groups
-    const parts = item.readings.map((r) => r.words.join("，，"));
-    speak(parts.join("，，，"));
+    return;
+  }
+
+  // Polyphonic: play pre-recorded audio per reading, then TTS words
+  for (let i = 0; i < item.readings.length; i++) {
+    const r = item.readings[i];
+    if (i > 0) await wait(500); // pause between readings
+    if (r.audio) {
+      await playAudio(r.audio);
+      await wait(300);
+    }
+    // TTS the words for this reading
+    await new Promise<void>((resolve) => {
+      if (typeof window === "undefined" || !window.speechSynthesis) { resolve(); return; }
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(r.words.join("，，"));
+      u.lang = "zh-CN";
+      u.rate = 0.78;
+      const voice = getBestChineseVoice();
+      if (voice) u.voice = voice;
+      u.onend = () => resolve();
+      u.onerror = () => resolve();
+      window.speechSynthesis.speak(u);
+    });
   }
 }
 
@@ -407,16 +441,17 @@ function QuizPlay({
     setAnswers((prev) => [...prev, answer]);
 
     if (correct) {
-      // Auto-speak full card and advance after delay
-      setTimeout(() => speakChar(q.correct), 300);
-      setTimeout(() => {
+      // Auto-speak full card, then advance
+      setTimeout(async () => {
+        await speakChar(q.correct);
+        await wait(500);
         if (qIdx < questions.length - 1) {
           setSelected(null);
           setQIdx((i) => i + 1);
         } else {
           onFinish([...answers, answer]);
         }
-      }, 3500);
+      }, 300);
     }
   };
 
