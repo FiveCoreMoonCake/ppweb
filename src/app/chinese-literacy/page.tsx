@@ -47,9 +47,16 @@ function speak(text: string) {
   window.speechSynthesis.speak(u);
 }
 
-/** Read char + both words with natural pauses: "山，，山上，，大山" */
+/**
+ * Read all readings of a char with natural pauses.
+ * Single reading:  "山，，山上，，大山"
+ * Multiple readings: "了，，好了，，来了，，，了，，了解，，了不起"
+ */
 function speakChar(item: CharItem) {
-  speak(`${item.char}，，${item.words[0]}，，${item.words[1]}`);
+  const parts = item.readings.map((r) =>
+    `${item.char}，，${r.words.join("，，")}`
+  );
+  speak(parts.join("，，，"));
 }
 
 /** Warm up voice list (some browsers load voices async) */
@@ -96,17 +103,32 @@ function CharCard({ item, compact = false }: { item: CharItem; compact?: boolean
   return (
     <div className={`flex flex-col items-center ${compact ? "gap-1" : "gap-2 sm:gap-3"}`}>
       <span className={compact ? "text-3xl" : "text-5xl sm:text-6xl"}>{item.emoji}</span>
-      <p className={`text-slate-500 font-medium ${compact ? "text-sm" : "text-lg sm:text-xl"}`}>
-        {item.pinyin}
-      </p>
+
+      {/* Pinyin: show all readings */}
+      <div className={`flex flex-wrap justify-center gap-x-2 text-slate-500 font-medium ${compact ? "text-sm" : "text-lg sm:text-xl"}`}>
+        {item.readings.map((r, i) => (
+          <span key={i}>{r.pinyin}</span>
+        ))}
+      </div>
+
       <p className={`font-bold text-slate-800 ${compact ? "text-4xl" : "text-7xl sm:text-8xl"}`}>
         {item.char}
       </p>
-      <div className={`flex gap-3 ${compact ? "text-base" : "text-xl sm:text-2xl"} text-indigo-600 font-medium`}>
-        <span>{item.words[0]}</span>
-        <span className="text-slate-300">|</span>
-        <span>{item.words[1]}</span>
+
+      {/* Words grouped by reading */}
+      <div className={`flex flex-col items-center ${compact ? "gap-1" : "gap-1.5"}`}>
+        {item.readings.map((r, i) => (
+          <div key={i} className={`flex items-center gap-2 ${compact ? "text-sm" : "text-lg sm:text-xl"}`}>
+            <span className="text-slate-400 text-xs font-mono">{r.pinyin}</span>
+            <div className="flex gap-2 text-indigo-600 font-medium">
+              {r.words.map((w, wi) => (
+                <span key={wi}>{w}</span>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
+
       <button
         onClick={(e) => { e.stopPropagation(); speakChar(item); }}
         className={`mt-1 flex items-center gap-2 bg-indigo-500 text-white rounded-full hover:bg-indigo-600 active:scale-95 transition-all ${
