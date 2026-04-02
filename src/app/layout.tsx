@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Property Law MBE Tables",
-  description: "Real Estate Rights & Future Interests Master Matching Table. Learn the magic words, mechanics, and MBE tricks to conquer property law.",
+  title: "PP 学习工具箱",
+  description: "用 Vibe Coding 快速搭建的交互式学习工具合集",
 };
 
 export default function RootLayout({
