@@ -50,13 +50,19 @@ function speak(text: string) {
 /**
  * Read all readings of a char with natural pauses.
  * Single reading:  "山，，山上，，大山"
- * Multiple readings: "了，，好了，，来了，，，了，，了解，，了不起"
+ * Polyphonic:      "好了，，来了，，，了解，，了不起"
+ *   (skip standalone char for polyphonic to avoid TTS picking wrong tone)
  */
 function speakChar(item: CharItem) {
-  const parts = item.readings.map((r) =>
-    `${item.char}，，${r.words.join("，，")}`
-  );
-  speak(parts.join("，，，"));
+  if (item.readings.length === 1) {
+    // Single reading: char + words
+    const r = item.readings[0];
+    speak(`${item.char}，，${r.words.join("，，")}`);
+  } else {
+    // Polyphonic: just read words grouped by reading, longer pause between groups
+    const parts = item.readings.map((r) => r.words.join("，，"));
+    speak(parts.join("，，，"));
+  }
 }
 
 /** Warm up voice list (some browsers load voices async) */
