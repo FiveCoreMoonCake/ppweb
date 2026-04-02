@@ -7,13 +7,62 @@ import { charGroups, allChars, type CharItem, type CharGroup } from "@/data/char
 
 /* ─── helpers ─── */
 
+/** Preferred Chinese voices ranked by quality (partial match on voice name) */
+const VOICE_PRIORITY = [
+  "Tingting",       // Apple macOS/iOS
+  "Lili",           // Apple
+  "Meijia",         // Apple
+  "Sinji",          // Apple Cantonese fallback
+  "Xiaoxiao",       // Microsoft Azure
+  "Yunxi",          // Microsoft Azure  
+  "Google",         // Google TTS
+];
+
+let _cachedVoice: SpeechSynthesisVoice | null = null;
+let _voiceResolved = false;
+
+function getBestChineseVoice(): SpeechSynthesisVoice | null {
+  if (_voiceResolved) return _cachedVoice;
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length === 0) return null; // not loaded yet
+  const zhVoices = voices.filter((v) => v.lang.startsWith("zh"));
+  for (const pref of VOICE_PRIORITY) {
+    const match = zhVoices.find((v) => v.name.includes(pref));
+    if (match) { _cachedVoice = match; _voiceResolved = true; return match; }
+  }
+  // Fallback: any zh-CN voice, then any zh voice
+  _cachedVoice = zhVoices.find((v) => v.lang === "zh-CN") ?? zhVoices[0] ?? null;
+  _voiceResolved = true;
+  return _cachedVoice;
+}
+
 function speak(text: string) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "zh-CN";
-  u.rate = 0.75;
+  u.rate = 0.78;
+  const voice = getBestChineseVoice();
+  if (voice) u.voice = voice;
   window.speechSynthesis.speak(u);
+}
+
+/** Read char + both words with natural pauses: "山，，山上，，大山" */
+function speakChar(item: CharItem) {
+  speak(`${item.char}，，${item.words[0]}，，${item.words[1]}`);
+}
+
+/** Warm up voice list (some browsers load voices async) */
+function useVoiceInit() {
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    // Try immediately
+    getBestChineseVoice();
+    // Also listen for async load
+    const handler = () => { _voiceResolved = false; getBestChineseVoice(); };
+    window.speechSynthesis.addEventListener("voiceschanged", handler);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", handler);
+  }, []);
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -59,7 +108,7 @@ function CharCard({ item, compact = false }: { item: CharItem; compact?: boolean
         <span>{item.words[1]}</span>
       </div>
       <button
-        onClick={(e) => { e.stopPropagation(); speak(item.char); }}
+        onClick={(e) => { e.stopPropagation(); speakChar(item); }}
         className={`mt-1 flex items-center gap-2 bg-indigo-500 text-white rounded-full hover:bg-indigo-600 active:scale-95 transition-all ${
           compact ? "px-4 py-2 text-sm" : "px-5 py-2.5 text-base"
         }`}
@@ -330,8 +379,8 @@ function QuizPlay({
     setAnswers((prev) => [...prev, answer]);
 
     if (correct) {
-      // Auto-speak and advance after delay
-      setTimeout(() => speak(q.correct.char), 300);
+      // Auto-speak full card and advance after delay
+      setTimeout(() => speakChar(q.correct), 300);
       setTimeout(() => {
         if (qIdx < questions.length - 1) {
           setSelected(null);
@@ -339,7 +388,7 @@ function QuizPlay({
         } else {
           onFinish([...answers, answer]);
         }
-      }, 2200);
+      }, 3500);
     }
   };
 
@@ -559,6 +608,7 @@ export default function ChineseLiteracyPage() {
   const [lastQuizConfig, setLastQuizConfig] = useState<{ groupIds: string[]; count: number } | null>(null);
 
   useEffect(() => setIsClient(true), []);
+  useVoiceInit();
 
   const startQuiz = useCallback((groupIds: string[], count: number) => {
     const questions = generateQuiz(groupIds, count);
