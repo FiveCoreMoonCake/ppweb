@@ -35,12 +35,52 @@ function getBestChineseVoice(): SpeechSynthesisVoice | null {
   return _cachedVoice;
 }
 
+/* ── Pre-recorded audio for polyphonic characters ── */
+let _manifest: Record<string, string> | null = null;
+let _manifestLoaded = false;
+let _currentAudio: HTMLAudioElement | null = null;
+
+async function loadManifest() {
+  if (_manifestLoaded) return;
+  _manifestLoaded = true;
+  try {
+    const res = await fetch('/audio/manifest.json');
+    _manifest = await res.json();
+  } catch { _manifest = null; }
+}
+
+/**
+ * Play pre-recorded audio for a polyphonic reading.
+ * Returns a Promise that resolves when playback ends, or null if not found.
+ */
+function playPrerecorded(char: string, pinyin: string): Promise<void> | null {
+  if (!_manifest) return null;
+  const key = `${char}-${pinyin}`;
+  const url = _manifest[key];
+  if (!url) return null;
+  if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
+  return new Promise((resolve) => {
+    const a = new Audio(url);
+    _currentAudio = a;
+    const done = () => { _currentAudio = null; resolve(); };
+    a.onended = done;
+    a.onerror = done;
+    // Safety timeout: if audio never fires ended/error (e.g. corrupt file), resolve after 8s
+    const timer = setTimeout(done, 8000);
+    const origDone = done;
+    a.onended = () => { clearTimeout(timer); origDone(); };
+    a.onerror = () => { clearTimeout(timer); origDone(); };
+    a.play().catch(() => { clearTimeout(timer); origDone(); });
+  });
+}
+
 /* ── Global abort / cancel state ── */
 let _abortId = 0;
 
-/** Stop ALL ongoing TTS immediately */
+/** Stop ALL ongoing TTS and audio immediately */
 function stopAll() {
   _abortId++;
+  if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
   if (typeof window !== "undefined" && window.speechSynthesis) {
     window.speechSynthesis.cancel();
   }
@@ -119,24 +159,38 @@ async function speakChar(item: CharItem) {
     return;
   }
 
-  // Polyphonic: speak each reading's context words sequentially.
-  // The context words naturally give the correct pronunciation.
+  // Polyphonic: play pre-recorded audio for each reading sequentially.
   for (let i = 0; i < item.readings.length; i++) {
-    if (myId !== _abortId) return; // aborted
+    if (myId !== _abortId) return;
     const r = item.readings[i];
     if (i > 0) await wait(600, myId);
     if (myId !== _abortId) return;
-    await speakAndWait(r.words.join("，，"), myId);
+    const pre = playPrerecorded(item.char, r.pinyin);
+    if (pre) await pre;
+    else await speakAndWait(r.words.join("，，"), myId);
   }
 }
 
-/** Warm up voice list (some browsers load voices async) */
+/** Play a polyphonic reading via pre-recorded audio, falling back to browser TTS */
+function speakReading(char: string, reading: { pinyin: string; words: string[] }, fallbackPrefix?: string) {
+  stopAll();
+  const pre = playPrerecorded(char, reading.pinyin);
+  if (pre) return;
+  // Fallback to browser TTS
+  const text = fallbackPrefix ? `${fallbackPrefix}，，${reading.words.join("，，")}` : reading.words.join("，，");
+  setTimeout(() => {
+    const u = makeUtterance(text);
+    if (!u) return;
+    window.speechSynthesis.speak(u);
+  }, 100);
+}
+
+/** Warm up voice list and load audio manifest */
 function useVoiceInit() {
   useEffect(() => {
+    loadManifest();
     if (typeof window === "undefined" || !window.speechSynthesis) return;
-    // Try immediately
     getBestChineseVoice();
-    // Also listen for async load
     const handler = () => { _voiceResolved = false; getBestChineseVoice(); };
     window.speechSynthesis.addEventListener("voiceschanged", handler);
     return () => window.speechSynthesis.removeEventListener("voiceschanged", handler);
@@ -244,6 +298,7 @@ function LearnMode({ onBack }: { onBack: () => void }) {
   const [groupIdx, setGroupIdx] = useState(0);
   const [cardIdx, setCardIdx] = useState(0);
   const [learned, setLearned] = useState<Set<string>>(new Set());
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => setLearned(loadProgress()), []);
 
@@ -263,55 +318,132 @@ function LearnMode({ onBack }: { onBack: () => void }) {
   }, [card]);
 
   const prev = () => setCardIdx((i) => Math.max(0, i - 1));
-  const next = () => setCardIdx((i) => Math.min(group.chars.length - 1, i + 1));
+  const next = () => {
+    if (cardIdx < group.chars.length - 1) {
+      setCardIdx((i) => i + 1);
+    } else if (groupIdx < charGroups.length - 1) {
+      // Auto-advance to next group
+      setGroupIdx((g) => g + 1);
+      setCardIdx(0);
+    }
+  };
+  const selectGroup = (i: number) => { setGroupIdx(i); setCardIdx(0); setSidebarOpen(false); };
+
+  const learnedInGroup = group.chars.filter((c) => learned.has(c.char)).length;
+  const isLastCard = cardIdx === group.chars.length - 1;
+  const hasNextGroup = groupIdx < charGroups.length - 1;
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") prev();
+      else if (e.key === "ArrowRight") next();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });
+
+  // Touch swipe support
+  const touchStart = useRef<number | null>(null);
+  const handleTouchStart = (e: React.TouchEvent) => { touchStart.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStart.current === null) return;
+    const diff = e.changedTouches[0].clientX - touchStart.current;
+    if (Math.abs(diff) > 50) { diff > 0 ? prev() : next(); }
+    touchStart.current = null;
+  };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-dvh">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 shrink-0">
         <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="font-bold text-slate-800 text-lg">学习模式</h1>
+        {/* Mobile: current group selector button */}
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="ml-auto sm:hidden px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-semibold"
+        >
+          {group.name} ▾
+        </button>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Group sidebar - scrollable on mobile as horizontal tabs */}
-        <nav className="hidden sm:flex flex-col w-48 shrink-0 border-r border-slate-200 bg-white overflow-y-auto">
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* PC sidebar - compact with scrolling */}
+        <nav className="hidden sm:flex flex-col w-36 shrink-0 border-r border-slate-200 bg-white overflow-y-auto">
           {charGroups.map((g, i) => {
             const count = g.chars.filter((c) => learned.has(c.char)).length;
             return (
               <button
                 key={g.id}
-                onClick={() => { setGroupIdx(i); setCardIdx(0); }}
-                className={`text-left px-4 py-3 border-b border-slate-100 transition-colors ${
+                onClick={() => selectGroup(i)}
+                className={`text-left px-3 py-2 border-b border-slate-100 transition-colors ${
                   i === groupIdx ? "bg-indigo-50 text-indigo-700 font-bold" : "text-slate-600 hover:bg-slate-50"
                 }`}
               >
-                <p className="text-sm font-semibold">{g.name}</p>
-                <p className="text-xs text-slate-400 mt-0.5">{count}/{g.chars.length} 已学</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold">{g.name}</span>
+                  <span className="text-[10px] text-slate-400">{count}/{g.chars.length}</span>
+                </div>
               </button>
             );
           })}
         </nav>
 
-        {/* Mobile group tabs */}
-        <div className="sm:hidden absolute top-[53px] left-0 right-0 z-10 bg-white border-b border-slate-200 flex overflow-x-auto">
-          {charGroups.map((g, i) => (
-            <button
-              key={g.id}
-              onClick={() => { setGroupIdx(i); setCardIdx(0); }}
-              className={`shrink-0 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                i === groupIdx ? "border-indigo-500 text-indigo-700" : "border-transparent text-slate-500"
-              }`}
-            >
-              {g.name}
-            </button>
-          ))}
-        </div>
+        {/* Mobile: group dropdown overlay */}
+        <AnimatePresence>
+          {sidebarOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="sm:hidden fixed inset-0 z-20 bg-black/20"
+                onClick={() => setSidebarOpen(false)}
+              />
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="sm:hidden absolute top-0 left-0 right-0 z-30 bg-white border-b border-slate-200 shadow-lg max-h-[60vh] overflow-y-auto"
+              >
+                <div className="grid grid-cols-3 gap-px bg-slate-100 p-1">
+                  {charGroups.map((g, i) => {
+                    const count = g.chars.filter((c) => learned.has(c.char)).length;
+                    return (
+                      <button
+                        key={g.id}
+                        onClick={() => selectGroup(i)}
+                        className={`px-2 py-2.5 text-center rounded-lg transition-colors ${
+                          i === groupIdx ? "bg-indigo-100 text-indigo-700 font-bold" : "bg-white text-slate-600"
+                        }`}
+                      >
+                        <p className="text-xs font-semibold">{g.name}</p>
+                        <p className="text-[10px] text-slate-400">{count}/{g.chars.length}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
 
         {/* Card area */}
-        <div className="flex-1 flex flex-col items-center justify-center relative pt-10 sm:pt-0">
+        <div
+          className="flex-1 flex flex-col items-center justify-center px-4 py-4"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Group progress bar */}
+          <div className="flex items-center gap-2 mb-3 text-xs text-slate-400">
+            <span className="font-semibold text-indigo-600">{group.name}</span>
+            <span>·</span>
+            <span>{learnedInGroup}/{group.chars.length} 已学</span>
+          </div>
+
           <AnimatePresence mode="wait">
             <motion.div
               key={`${group.id}-${cardIdx}`}
@@ -319,17 +451,17 @@ function LearnMode({ onBack }: { onBack: () => void }) {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -40 }}
               transition={{ duration: 0.2 }}
-              className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 sm:p-10 w-[85vw] sm:w-[400px] max-w-[420px]"
+              className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 sm:p-10 w-full max-w-[400px]"
             >
               <CharCard item={card} />
             </motion.div>
           </AnimatePresence>
 
           {/* Navigation */}
-          <div className="flex items-center gap-6 mt-6">
+          <div className="flex items-center gap-6 mt-5">
             <button
               onClick={prev}
-              disabled={cardIdx === 0}
+              disabled={cardIdx === 0 && groupIdx === 0}
               className="p-3 rounded-full bg-white border border-slate-200 shadow-sm disabled:opacity-30 hover:bg-slate-50 active:scale-95 transition-all"
             >
               <ChevronLeft className="w-6 h-6 text-slate-600" />
@@ -339,12 +471,15 @@ function LearnMode({ onBack }: { onBack: () => void }) {
             </span>
             <button
               onClick={next}
-              disabled={cardIdx === group.chars.length - 1}
+              disabled={isLastCard && !hasNextGroup}
               className="p-3 rounded-full bg-white border border-slate-200 shadow-sm disabled:opacity-30 hover:bg-slate-50 active:scale-95 transition-all"
             >
               <ChevronRight className="w-6 h-6 text-slate-600" />
             </button>
           </div>
+          {isLastCard && hasNextGroup && (
+            <p className="text-xs text-indigo-500 mt-1">→ 继续将进入{charGroups[groupIdx + 1].name}</p>
+          )}
         </div>
       </div>
     </div>
@@ -422,9 +557,11 @@ function QuizSettings({ onStart, onBack }: { onStart: (groupIds: string[], count
 
   const maxCount = allChars.filter((c) => selected.has(c.groupId)).length;
   const counts = [5, 10, 15, 20, 30, 50];
+  // Auto-adjust count if current selection can't support it
+  const effectiveCount = Math.min(count, maxCount);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-dvh">
       <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 shrink-0">
         <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
           <ArrowLeft className="w-5 h-5" />
@@ -432,21 +569,34 @@ function QuizSettings({ onStart, onBack }: { onStart: (groupIds: string[], count
         <h1 className="font-bold text-slate-800 text-lg">测验设置</h1>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 sm:py-10 max-w-lg mx-auto w-full">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 sm:py-10 max-w-xl mx-auto w-full">
         <h2 className="font-bold text-slate-700 mb-3">选择出题范围</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-8">
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          <button
+            onClick={() => setSelected(new Set(charGroups.map((g) => g.id)))}
+            className="text-xs px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-600 font-medium hover:bg-indigo-100"
+          >
+            全选
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="text-xs px-2.5 py-1 rounded-md bg-slate-50 text-slate-500 font-medium hover:bg-slate-100"
+          >
+            清空
+          </button>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 mb-8">
           {charGroups.map((g) => (
             <button
               key={g.id}
               onClick={() => toggle(g.id)}
-              className={`px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
+              className={`px-2 py-2 rounded-lg border text-xs font-semibold transition-all ${
                 selected.has(g.id)
                   ? "border-indigo-500 bg-indigo-50 text-indigo-700"
                   : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
               }`}
             >
               {g.name}
-              <span className="block text-xs font-normal mt-0.5 opacity-70">{g.chars.length} 字</span>
             </button>
           ))}
         </div>
@@ -471,7 +621,7 @@ function QuizSettings({ onStart, onBack }: { onStart: (groupIds: string[], count
 
         <button
           disabled={selected.size === 0 || maxCount < 4}
-          onClick={() => onStart([...selected], Math.min(count, maxCount))}
+          onClick={() => onStart([...selected], effectiveCount)}
           className="w-full py-4 rounded-2xl bg-indigo-500 text-white font-bold text-lg hover:bg-indigo-600 active:scale-[0.98] transition-all disabled:opacity-40"
         >
           开始测验 🚀
@@ -508,17 +658,23 @@ function QuizPlay({
   const isCorrect = selected === q.correct.char;
   const answered = selected !== null;
 
+  /** Speak the quiz prompt: polyphonic uses pre-recorded audio, single uses TTS */
+  const speakPrompt = useCallback(() => {
+    if (isPolyphonic) speakReading(q.correct.char, reading);
+    else speak(q.correct.char);
+  }, [q.correct.char, reading, isPolyphonic]);
+
   // Auto-speak the prompt when question loads
   useEffect(() => {
     hasSpoken.current = false;
     const timer = setTimeout(() => {
       if (!hasSpoken.current) {
-        speak(promptText);
+        speakPrompt();
         hasSpoken.current = true;
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [qIdx, promptText]);
+  }, [qIdx, speakPrompt]);
 
   const handleSelect = (char: string) => {
     if (answered) return;
@@ -528,12 +684,11 @@ function QuizPlay({
     setAnswers((prev) => [...prev, answer]);
 
     if (correct) {
-      // Speak: polyphonic → words only; single → char + words
-      const words = q.correct.readings[q.readingIdx].words;
-      const text = q.correct.readings.length > 1
-        ? words.join("，，")
-        : `${q.correct.char}，，${words.join("，，")}`;
-      setTimeout(() => speak(text), 300);
+      const r = q.correct.readings[q.readingIdx];
+      setTimeout(() => {
+        if (q.correct.readings.length > 1) speakReading(q.correct.char, r);
+        else speakReading(q.correct.char, r, q.correct.char);
+      }, 300);
     }
   };
 
@@ -547,8 +702,27 @@ function QuizPlay({
     }
   };
 
+  // Keyboard: Enter/Space to advance, 1-4 to select options
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (answered && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        handleNext();
+      }
+      if (!answered && e.key >= "1" && e.key <= "4") {
+        const idx = parseInt(e.key) - 1;
+        if (idx < q.options.length) handleSelect(q.options[idx].char);
+      }
+      if (e.key === "r" || e.key === "R") {
+        speakPrompt();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-dvh">
       <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0">
         <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
           <ArrowLeft className="w-5 h-5" />
@@ -565,78 +739,85 @@ function QuizPlay({
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 gap-6 overflow-y-auto">
-        <p className="text-slate-500 font-medium text-base">听一听，选一选 👂</p>
-        <p className="text-xs text-slate-400 -mt-4">{isPolyphonic ? "听词语，找出对应的字" : "听发音，找出对应的字"}</p>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Scrollable question area */}
+        <div className="flex-1 flex flex-col items-center justify-center px-4 py-4 gap-4 overflow-y-auto">
+          <p className="text-slate-500 font-medium text-sm">听一听，选一选 👂</p>
+          <p className="text-[11px] text-slate-400 -mt-2">{isPolyphonic ? "听词语，找出对应的字" : "听发音，找出对应的字"}</p>
 
-        <button
-          onClick={() => speak(promptText)}
-          className="w-20 h-20 rounded-full bg-indigo-100 flex items-center justify-center hover:bg-indigo-200 active:scale-95 transition-all"
-        >
-          <Volume2 className="w-10 h-10 text-indigo-600" />
-        </button>
+          <button
+            onClick={() => speakPrompt()}
+            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-indigo-100 flex items-center justify-center hover:bg-indigo-200 active:scale-95 transition-all shrink-0"
+          >
+            <Volume2 className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-600" />
+          </button>
 
-        {/* Options 2x2 grid */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 w-full max-w-xs sm:max-w-sm">
-          {q.options.map((opt) => {
-            let style = "bg-white border-slate-200 text-slate-800 hover:border-indigo-300 hover:shadow-md";
-            if (answered) {
-              if (opt.char === q.correct.char) style = "bg-emerald-50 border-emerald-500 text-emerald-700 ring-2 ring-emerald-200";
-              else if (opt.char === selected) style = "bg-rose-50 border-rose-400 text-rose-600";
-              else style = "bg-slate-50 border-slate-200 text-slate-400";
-            }
-            return (
-              <motion.button
-                key={opt.char}
-                onClick={() => handleSelect(opt.char)}
-                disabled={answered}
-                whileTap={answered ? {} : { scale: 0.93 }}
-                className={`border-2 rounded-2xl py-5 sm:py-7 text-4xl sm:text-5xl font-bold transition-all ${style}`}
-              >
-                {opt.char}
-              </motion.button>
-            );
-          })}
+          {/* Options 2x2 grid */}
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 w-full max-w-xs sm:max-w-sm">
+            {q.options.map((opt) => {
+              let style = "bg-white border-slate-200 text-slate-800 hover:border-indigo-300 hover:shadow-md";
+              if (answered) {
+                if (opt.char === q.correct.char) style = "bg-emerald-50 border-emerald-500 text-emerald-700 ring-2 ring-emerald-200";
+                else if (opt.char === selected) style = "bg-rose-50 border-rose-400 text-rose-600";
+                else style = "bg-slate-50 border-slate-200 text-slate-400";
+              }
+              return (
+                <motion.button
+                  key={opt.char}
+                  onClick={() => handleSelect(opt.char)}
+                  disabled={answered}
+                  whileTap={answered ? {} : { scale: 0.93 }}
+                  className={`border-2 rounded-2xl py-4 sm:py-6 text-4xl sm:text-5xl font-bold transition-all ${style}`}
+                >
+                  {opt.char}
+                </motion.button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Feedback area */}
+        {/* Fixed bottom feedback + next button */}
         <AnimatePresence>
           {answered && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-xs sm:max-w-sm"
+              className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 sm:py-4 flex flex-col items-center gap-2"
             >
-              {isCorrect ? (
-                <div className="flex items-center justify-center gap-2 text-emerald-600 font-bold text-lg mb-3">
-                  <Check className="w-6 h-6" /> 太棒了！
+              {/* Compact feedback */}
+              <div className="flex items-center gap-3 w-full max-w-sm">
+                {isCorrect ? (
+                  <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-sm">
+                    <Check className="w-5 h-5" /> 太棒了！
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-rose-500 font-bold text-sm">
+                    <XIcon className="w-4 h-4" /> {isPolyphonic ? `「${promptText}」→「${q.correct.char}」` : `答案：${q.correct.char}`}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 ml-auto">
+                  <PixelEmoji emoji={reading.emoji} size="sm" />
+                  <div className="flex flex-col">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-bold text-slate-800">{q.correct.char}</span>
+                      <span className="text-slate-400 text-xs font-mono">{reading.pinyin}</span>
+                    </div>
+                    <div className="flex gap-1.5 text-indigo-600 font-medium text-sm">
+                      {reading.words.map((w, i) => <span key={i}>{w}</span>)}
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); speakReading(q.correct.char, reading, isPolyphonic ? undefined : q.correct.char); }}
+                    className="p-2 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 active:scale-95 transition-all"
+                  >
+                    <Volume2 className="w-4 h-4" />
+                  </button>
                 </div>
-              ) : (
-                <div className="flex items-center justify-center gap-2 text-rose-500 font-bold text-lg mb-3">
-                  <XIcon className="w-5 h-5" /> {isPolyphonic ? `「${promptText}」的「${q.correct.char}」` : `正确答案是「${q.correct.char}」`}
-                </div>
-              )}
-
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col items-center gap-2">
-                <PixelEmoji emoji={reading.emoji} size="md" />
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-slate-800">{q.correct.char}</span>
-                  <span className="text-slate-400 text-sm font-mono">{reading.pinyin}</span>
-                </div>
-                <div className="flex gap-2 text-indigo-600 font-medium text-lg">
-                  {reading.words.map((w, i) => <span key={i}>{w}</span>)}
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); speak(isPolyphonic ? reading.words.join("，，") : `${q.correct.char}，，${reading.words.join("，，")}`); }}
-                  className="mt-1 flex items-center gap-1.5 bg-indigo-500 text-white rounded-full px-4 py-1.5 text-sm hover:bg-indigo-600 active:scale-95 transition-all"
-                >
-                  <Volume2 className="w-4 h-4" /> 朗读
-                </button>
               </div>
 
               <button
                 onClick={handleNext}
-                className={`mt-4 w-full py-3 rounded-xl font-bold text-base active:scale-[0.98] transition-all ${
+                className={`w-full max-w-sm py-3 rounded-xl font-bold text-base active:scale-[0.98] transition-all ${
                   isCorrect
                     ? "bg-emerald-500 text-white hover:bg-emerald-600"
                     : "bg-indigo-500 text-white hover:bg-indigo-600"
@@ -671,7 +852,7 @@ function QuizResults({
   const [showCard, setShowCard] = useState<CharItem | null>(null);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-dvh">
       <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 shrink-0">
         <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
           <ArrowLeft className="w-5 h-5" />
@@ -802,14 +983,25 @@ export default function ChineseLiteracyPage() {
     return <QuizResults answers={quizAnswers} onRetry={retryQuiz} onBack={() => setMode("home")} />;
 
   // Home
+  const progress = isClient ? loadProgress() : new Set<string>();
+  const progressPct = Math.round((progress.size / allChars.length) * 100);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 flex flex-col items-center justify-center px-4 py-10">
+    <div className="min-h-dvh bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 flex flex-col items-center justify-center px-4 py-10">
       <div className="text-center mb-10">
         <p className="text-6xl mb-4">📖</p>
         <h1 className="text-3xl sm:text-4xl font-bold text-slate-800 tracking-tight">中文识字</h1>
         <p className="text-slate-500 mt-2 text-sm sm:text-base">
           {allChars.length} 个常用字 · {charGroups.length} 个分组
         </p>
+        {progress.size > 0 && (
+          <div className="mt-3 flex flex-col items-center gap-1">
+            <div className="w-48 h-2 bg-white/60 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${progressPct}%` }} />
+            </div>
+            <p className="text-xs text-slate-400">已学 {progress.size}/{allChars.length} 字（{progressPct}%）</p>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm sm:max-w-md">
