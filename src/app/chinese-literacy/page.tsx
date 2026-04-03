@@ -53,24 +53,26 @@ async function loadManifest() {
  * Play pre-recorded audio for a polyphonic reading.
  * Returns a Promise that resolves when playback ends, or null if not found.
  */
-function playPrerecorded(char: string, pinyin: string): Promise<void> | null {
+/**
+ * Play pre-recorded audio. Lookup order:
+ *   1. "char-pinyin" (polyphonic reading)
+ *   2. "char" (single-reading)
+ * Returns a Promise that resolves when done, or null if not found.
+ */
+function playPrerecorded(char: string, pinyin?: string): Promise<void> | null {
   if (!_manifest) return null;
-  const key = `${char}-${pinyin}`;
-  const url = _manifest[key];
+  // Try polyphonic key first, then single-char key
+  const url = (pinyin && _manifest[`${char}-${pinyin}`]) || _manifest[char];
   if (!url) return null;
   if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
   return new Promise((resolve) => {
     const a = new Audio(url);
     _currentAudio = a;
-    const done = () => { _currentAudio = null; resolve(); };
-    a.onended = done;
-    a.onerror = done;
-    // Safety timeout: if audio never fires ended/error (e.g. corrupt file), resolve after 8s
-    const timer = setTimeout(done, 8000);
-    const origDone = done;
-    a.onended = () => { clearTimeout(timer); origDone(); };
-    a.onerror = () => { clearTimeout(timer); origDone(); };
-    a.play().catch(() => { clearTimeout(timer); origDone(); });
+    const done = () => { if (_currentAudio === a) _currentAudio = null; resolve(); };
+    const timer = setTimeout(done, 10000);
+    a.onended = () => { clearTimeout(timer); done(); };
+    a.onerror = () => { clearTimeout(timer); done(); };
+    a.play().catch(() => { clearTimeout(timer); done(); });
   });
 }
 
@@ -143,14 +145,15 @@ function speakAndWait(text: string, abortId: number): Promise<void> {
  *                 (e.g. "大夫" reads dài fu, "大小" reads dà xiǎo).
  */
 async function speakChar(item: CharItem) {
-  stopAll(); // cancel anything currently playing
-  const myId = _abortId; // capture current abort id
+  stopAll();
+  const myId = _abortId;
 
   if (item.readings.length === 1) {
+    // Single reading: try pre-recorded, fallback to browser TTS
+    const pre = playPrerecorded(item.char);
+    if (pre) { await pre; return; }
     const r = item.readings[0];
     const text = `${item.char}，，${r.words.join("，，")}`;
-    // Wait for cancel() to fully process, then speak directly
-    // (Don't call speak() — that would call stopAll() again, double-cancelling)
     await wait(100, myId);
     if (myId !== _abortId) return;
     const u = makeUtterance(text);
@@ -172,8 +175,10 @@ async function speakChar(item: CharItem) {
 }
 
 /** Play a polyphonic reading via pre-recorded audio, falling back to browser TTS */
+/** Play a reading via pre-recorded audio, falling back to browser TTS */
 function speakReading(char: string, reading: { pinyin: string; words: string[] }, fallbackPrefix?: string) {
   stopAll();
+  // Try polyphonic key, then single-char key
   const pre = playPrerecorded(char, reading.pinyin);
   if (pre) return;
   // Fallback to browser TTS
@@ -658,10 +663,16 @@ function QuizPlay({
   const isCorrect = selected === q.correct.char;
   const answered = selected !== null;
 
-  /** Speak the quiz prompt: polyphonic uses pre-recorded audio, single uses TTS */
+  /** Speak the quiz prompt: try pre-recorded audio first, fallback to browser TTS */
   const speakPrompt = useCallback(() => {
-    if (isPolyphonic) speakReading(q.correct.char, reading);
-    else speak(q.correct.char);
+    stopAll();
+    if (isPolyphonic) {
+      speakReading(q.correct.char, reading);
+    } else {
+      // Single-reading: try pre-recorded, fallback to browser TTS
+      const pre = playPrerecorded(q.correct.char);
+      if (!pre) speak(q.correct.char);
+    }
   }, [q.correct.char, reading, isPolyphonic]);
 
   // Auto-speak the prompt when question loads
