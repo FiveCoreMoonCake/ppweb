@@ -29,6 +29,16 @@ export const tools: Tool[] = [
     category: "kids",
     tags: ["识字", "学龄前", "听音辨字"],
   },
+  {
+    id: "picture-books",
+    title: "绘本馆",
+    description:
+      "有声绘本朗读工具，逐字高亮跟读，支持自动翻页播放，帮助儿童培养阅读兴趣和语感。",
+    href: "/picture-books",
+    icon: "📚",
+    category: "kids",
+    tags: ["绘本", "朗读", "有声"],
+  },
 ];
 
 export const categoryLabels: Record<Tool["category"], string> = {
