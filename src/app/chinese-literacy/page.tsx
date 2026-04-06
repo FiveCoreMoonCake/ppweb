@@ -285,6 +285,13 @@ function CharCard({ item, compact = false }: { item: CharItem; compact?: boolean
         ))}
       </div>
 
+      {/* Explain for abstract chars */}
+      {item.explain && !compact && (
+        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-center max-w-[300px] leading-relaxed">
+          {item.explain}
+        </p>
+      )}
+
       <button
         onClick={(e) => { e.stopPropagation(); speakChar(item); }}
         className={`mt-1 flex items-center gap-2 bg-indigo-500 text-white rounded-full hover:bg-indigo-600 active:scale-95 transition-all ${
@@ -491,6 +498,96 @@ function LearnMode({ onBack }: { onBack: () => void }) {
   );
 }
 
+/* ─── Learning Records (spaced repetition) ─── */
+
+interface CharRecord {
+  right: number;
+  wrong: number;
+  lastSeen: string;     // ISO date string
+  nextReview: string;   // ISO date string
+  interval: number;     // days
+}
+
+const RECORDS_KEY = "chinese-literacy-records";
+
+function loadRecords(): Record<string, CharRecord> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(RECORDS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveRecords(records: Record<string, CharRecord>) {
+  localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+}
+
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function recordAnswer(char: string, correct: boolean): Record<string, CharRecord> {
+  const records = loadRecords();
+  const today = todayStr();
+  const prev = records[char] || { right: 0, wrong: 0, lastSeen: today, nextReview: today, interval: 1 };
+
+  if (correct) {
+    prev.right++;
+    prev.interval = Math.min(prev.interval * 2, 64); // cap at 64 days
+    prev.nextReview = addDays(today, prev.interval);
+  } else {
+    prev.wrong++;
+    prev.interval = 1;
+    prev.nextReview = addDays(today, 1);
+  }
+  prev.lastSeen = today;
+  records[char] = prev;
+  saveRecords(records);
+  return records;
+}
+
+/* ─── Sound Effects ─── */
+
+function playCorrectSound() {
+  try {
+    const ctx = new AudioContext();
+    // Happy ascending ding
+    [523.25, 659.25, 783.99].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.15, ctx.currentTime + i * 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.1 + 0.3);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime + i * 0.1);
+      osc.stop(ctx.currentTime + i * 0.1 + 0.3);
+    });
+  } catch {}
+}
+
+function playWrongSound() {
+  try {
+    const ctx = new AudioContext();
+    // Low buzz
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.value = 200;
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+  } catch {}
+}
+
 /* ─── Quiz Types ─── */
 
 interface QuizQuestion {
@@ -514,11 +611,51 @@ interface PoolEntry {
 
 function generateQuiz(groupIds: string[], count: number): QuizQuestion[] {
   const chars = allChars.filter((c) => groupIds.includes(c.groupId));
+  const records = loadRecords();
+  const today = todayStr();
+
   // Expand: each reading of each char is a separate pool entry
   const pool: PoolEntry[] = chars.flatMap((item) =>
     item.readings.map((_, ri) => ({ item, readingIdx: ri }))
   );
-  const picked = shuffle(pool).slice(0, count);
+
+  // Categorize entries
+  const dueForReview: PoolEntry[] = [];   // nextReview <= today
+  const highError: PoolEntry[] = [];      // wrong >= 3 and not already due
+  const newChars: PoolEntry[] = [];       // never seen
+  const rest: PoolEntry[] = [];
+
+  for (const entry of pool) {
+    const rec = records[entry.item.char];
+    if (!rec) {
+      newChars.push(entry);
+    } else if (rec.nextReview <= today) {
+      dueForReview.push(entry);
+    } else if (rec.wrong >= 3) {
+      highError.push(entry);
+    } else {
+      rest.push(entry);
+    }
+  }
+
+  // Priority: due > high-error > new > rest
+  const prioritized = [
+    ...shuffle(dueForReview),
+    ...shuffle(highError),
+    ...shuffle(newChars),
+    ...shuffle(rest),
+  ];
+
+  // Deduplicate by char (avoid testing same char twice)
+  const seen = new Set<string>();
+  const picked: PoolEntry[] = [];
+  for (const entry of prioritized) {
+    if (seen.has(entry.item.char)) continue;
+    seen.add(entry.item.char);
+    picked.push(entry);
+    if (picked.length >= count) break;
+  }
+
   const questions = picked.map((entry) => {
     // Pick 3 distractors (different chars)
     const sameGroup = chars.filter((c) => c.char !== entry.item.char && c.groupId === entry.item.groupId);
@@ -694,12 +831,18 @@ function QuizPlay({
     const answer: QuizAnswer = { question: q, selected: char, isCorrect: correct };
     setAnswers((prev) => [...prev, answer]);
 
+    // Record to localStorage for spaced repetition
+    recordAnswer(q.correct.char, correct);
+
     if (correct) {
+      playCorrectSound();
       const r = q.correct.readings[q.readingIdx];
       setTimeout(() => {
         if (q.correct.readings.length > 1) speakReading(q.correct.char, r);
         else speakReading(q.correct.char, r, q.correct.char);
       }, 300);
+    } else {
+      playWrongSound();
     }
   };
 
@@ -766,28 +909,54 @@ function QuizPlay({
           {/* Options 2x2 grid */}
           <div className="grid grid-cols-2 gap-2.5 sm:gap-3 w-full max-w-xs sm:max-w-sm">
             {q.options.map((opt) => {
+              const isCorrectOpt = opt.char === q.correct.char;
+              const isWrongPick = answered && opt.char === selected && !isCorrectOpt;
+              const showDetail = answered && (isCorrectOpt || isWrongPick);
+              const optReading = opt.readings[0];
+
               let style = "bg-white border-slate-200 text-slate-800 hover:border-indigo-300 hover:shadow-md";
               if (answered) {
-                if (opt.char === q.correct.char) style = "bg-emerald-50 border-emerald-500 text-emerald-700 ring-2 ring-emerald-200";
-                else if (opt.char === selected) style = "bg-rose-50 border-rose-400 text-rose-600";
+                if (isCorrectOpt) style = "bg-emerald-50 border-emerald-500 text-emerald-700 ring-2 ring-emerald-200";
+                else if (isWrongPick) style = "bg-rose-50 border-rose-400 text-rose-600";
                 else style = "bg-slate-50 border-slate-200 text-slate-400";
               }
+
+              const handleClick = () => {
+                if (!answered) { handleSelect(opt.char); return; }
+                if (showDetail) {
+                  speakReading(opt.char, optReading, opt.char);
+                }
+              };
+
               return (
                 <motion.button
                   key={opt.char}
-                  onClick={() => handleSelect(opt.char)}
-                  disabled={answered}
+                  onClick={handleClick}
                   whileTap={answered ? {} : { scale: 0.93 }}
-                  className={`border-2 rounded-2xl py-4 sm:py-6 text-4xl sm:text-5xl font-bold transition-all ${style}`}
+                  className={`border-2 rounded-2xl py-3 sm:py-4 font-bold transition-all flex flex-col items-center gap-0.5 ${style}`}
                 >
-                  {opt.char}
+                  <span className="text-4xl sm:text-5xl">{opt.char}</span>
+                  {showDetail && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex flex-col items-center mt-1"
+                    >
+                      <span className={`text-xs font-mono ${isCorrectOpt ? "text-emerald-500" : "text-rose-400"}`}>
+                        {optReading.pinyin}
+                      </span>
+                      <span className={`text-xs font-medium ${isCorrectOpt ? "text-emerald-600" : "text-rose-500"}`}>
+                        {optReading.words.join("、")}
+                      </span>
+                    </motion.div>
+                  )}
                 </motion.button>
               );
             })}
           </div>
         </div>
 
-        {/* Fixed bottom feedback + next button */}
+        {/* Fixed bottom: feedback label + next button */}
         <AnimatePresence>
           {answered && (
             <motion.div
@@ -795,35 +964,16 @@ function QuizPlay({
               animate={{ opacity: 1, y: 0 }}
               className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 sm:py-4 flex flex-col items-center gap-2"
             >
-              {/* Compact feedback */}
-              <div className="flex items-center gap-3 w-full max-w-sm">
+              <div className="w-full max-w-sm text-center">
                 {isCorrect ? (
-                  <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-sm">
+                  <p className="text-emerald-600 font-bold text-sm flex items-center justify-center gap-1.5">
                     <Check className="w-5 h-5" /> 太棒了！
-                  </div>
+                  </p>
                 ) : (
-                  <div className="flex items-center gap-1.5 text-rose-500 font-bold text-sm">
-                    <XIcon className="w-4 h-4" /> {isPolyphonic ? `「${promptText}」→「${q.correct.char}」` : `答案：${q.correct.char}`}
-                  </div>
+                  <p className="text-rose-500 font-bold text-sm flex items-center justify-center gap-1.5">
+                    <XIcon className="w-4 h-4" /> 答错了，点字听读音
+                  </p>
                 )}
-                <div className="flex items-center gap-2 ml-auto">
-                  <PixelEmoji emoji={reading.emoji} size="sm" />
-                  <div className="flex flex-col">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-2xl font-bold text-slate-800">{q.correct.char}</span>
-                      <span className="text-slate-400 text-xs font-mono">{reading.pinyin}</span>
-                    </div>
-                    <div className="flex gap-1.5 text-indigo-600 font-medium text-sm">
-                      {reading.words.map((w, i) => <span key={i}>{w}</span>)}
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); speakReading(q.correct.char, reading, isPolyphonic ? undefined : q.correct.char); }}
-                    className="p-2 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 active:scale-95 transition-all"
-                  >
-                    <Volume2 className="w-4 h-4" />
-                  </button>
-                </div>
               </div>
 
               <button
