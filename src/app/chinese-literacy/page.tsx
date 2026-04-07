@@ -1168,9 +1168,418 @@ function QuizResults({
   );
 }
 
+/* ─── Listen Quiz (听音选字 3×3) ─── */
+
+interface ListenRoundMistake {
+  /** The char that was being asked */
+  target: CharItem;
+  /** Chars the player incorrectly tapped before getting it right */
+  wrongTaps: string[];
+}
+
+interface ListenQuizResult {
+  /** Total mistakes across all rounds */
+  totalMistakes: number;
+  /** Details of each mistake */
+  mistakes: ListenRoundMistake[];
+}
+
+/** Pick 9 random single-reading chars from the given groups */
+function generateListenGrid(groupIds: string[]): CharItem[] {
+  const pool = allChars.filter((c) => groupIds.includes(c.groupId) && c.readings.length === 1);
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 9);
+}
+
+function ListenQuizSettings({ onStart, onBack }: { onStart: (groupIds: string[]) => void; onBack: () => void }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(charGroups.map((g) => g.id)));
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const availableCount = allChars.filter((c) => selected.has(c.groupId) && c.readings.length === 1).length;
+
+  return (
+    <div className="flex flex-col h-dvh">
+      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 shrink-0">
+        <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <h1 className="font-bold text-slate-800 text-lg">听音选字设置</h1>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 sm:py-10 max-w-xl mx-auto w-full">
+        <h2 className="font-bold text-slate-700 mb-3">选择出题范围</h2>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          <button
+            onClick={() => setSelected(new Set(charGroups.map((g) => g.id)))}
+            className="text-xs px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-600 font-medium hover:bg-indigo-100"
+          >
+            全选
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="text-xs px-2.5 py-1 rounded-md bg-slate-50 text-slate-500 font-medium hover:bg-slate-100"
+          >
+            清空
+          </button>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 mb-8">
+          {charGroups.map((g) => (
+            <button
+              key={g.id}
+              onClick={() => toggle(g.id)}
+              className={`px-2 py-2 rounded-lg border text-xs font-semibold transition-all ${
+                selected.has(g.id)
+                  ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                  : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+              }`}
+            >
+              {g.name}
+            </button>
+          ))}
+        </div>
+
+        <p className="text-sm text-slate-500 mb-6">
+          每次从所选范围随机出 9 个字，排成 3×3 方阵，听音选字。
+          {availableCount > 0 && <span className="text-slate-400"> （可用 {availableCount} 字）</span>}
+        </p>
+
+        <button
+          disabled={availableCount < 9}
+          onClick={() => onStart([...selected])}
+          className="w-full py-4 rounded-2xl bg-indigo-500 text-white font-bold text-lg hover:bg-indigo-600 active:scale-[0.98] transition-all disabled:opacity-40"
+        >
+          开始游戏 🎮
+        </button>
+        {availableCount < 9 && selected.size > 0 && (
+          <p className="text-xs text-rose-500 mt-2 text-center">所选范围需至少 9 个单音字才能出题</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ListenQuizPlay({
+  groupIds,
+  onFinish,
+  onBack,
+}: {
+  groupIds: string[];
+  onFinish: (result: ListenQuizResult, grid: CharItem[]) => void;
+  onBack: () => void;
+}) {
+  const [grid, setGrid] = useState<CharItem[]>([]);
+  const [queue, setQueue] = useState<number[]>([]);     // indices into grid, shuffled order
+  const [currentIdx, setCurrentIdx] = useState(0);       // position in queue
+  const [solved, setSolved] = useState<Set<number>>(new Set());  // grid indices solved
+  const [shaking, setShaking] = useState<number | null>(null);   // grid index currently shaking
+  const [mistakes, setMistakes] = useState<ListenRoundMistake[]>([]);
+  const [currentWrongTaps, setCurrentWrongTaps] = useState<string[]>([]);
+  const hasSpoken = useRef(false);
+
+  // Initialize grid and queue
+  useEffect(() => {
+    const chars = generateListenGrid(groupIds);
+    setGrid(chars);
+    const order = chars.map((_, i) => i).sort(() => Math.random() - 0.5);
+    setQueue(order);
+    setCurrentIdx(0);
+    setSolved(new Set());
+    setMistakes([]);
+    setCurrentWrongTaps([]);
+  }, [groupIds]);
+
+  const targetGridIdx = queue[currentIdx];
+  const targetChar = grid[targetGridIdx];
+
+  // Play the current target's audio
+  const speakTarget = useCallback(() => {
+    if (!targetChar) return;
+    stopAll();
+    const pre = playPrerecorded(targetChar.char);
+    if (!pre) speak(targetChar.char);
+  }, [targetChar]);
+
+  // Auto-speak when question changes
+  useEffect(() => {
+    if (!targetChar) return;
+    hasSpoken.current = false;
+    const timer = setTimeout(() => {
+      if (!hasSpoken.current) {
+        speakTarget();
+        hasSpoken.current = true;
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [currentIdx, targetChar, speakTarget]);
+
+  const handleTap = (gridIdx: number) => {
+    if (solved.has(gridIdx)) return; // already solved
+    if (!targetChar) return;
+
+    if (gridIdx === targetGridIdx) {
+      // Correct!
+      playCorrectSound();
+      const newSolved = new Set(solved);
+      newSolved.add(gridIdx);
+      setSolved(newSolved);
+
+      // Record mistake if any wrong taps on this char
+      if (currentWrongTaps.length > 0) {
+        setMistakes((prev) => [...prev, { target: targetChar, wrongTaps: [...currentWrongTaps] }]);
+      }
+      setCurrentWrongTaps([]);
+
+      // Record to spaced repetition
+      recordAnswer(targetChar.char, currentWrongTaps.length === 0);
+
+      // Move to next or finish
+      if (newSolved.size === grid.length) {
+        // All done
+        stopAll();
+        const totalMistakes = mistakes.reduce((s, m) => s + m.wrongTaps.length, 0) + currentWrongTaps.length;
+        const finalMistakes = currentWrongTaps.length > 0
+          ? [...mistakes, { target: targetChar, wrongTaps: [...currentWrongTaps] }]
+          : mistakes;
+        setTimeout(() => onFinish({ totalMistakes, mistakes: finalMistakes }, grid), 600);
+      } else {
+        setCurrentIdx((i) => i + 1);
+      }
+    } else {
+      // Wrong!
+      playWrongSound();
+      setCurrentWrongTaps((prev) => [...prev, grid[gridIdx].char]);
+      // Record wrong tap for the tapped char too
+      recordAnswer(grid[gridIdx].char, false);
+      // Shake animation
+      setShaking(gridIdx);
+      setTimeout(() => setShaking(null), 500);
+    }
+  };
+
+  if (grid.length < 9) {
+    return (
+      <div className="flex flex-col h-dvh items-center justify-center gap-4 px-4">
+        <p className="text-slate-500 text-center">所选范围的单音字不足 9 个，请选择更多分组</p>
+        <button onClick={onBack} className="px-6 py-2 rounded-xl bg-slate-100 text-slate-600 font-medium">返回</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-dvh">
+      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0">
+        <button onClick={() => { stopAll(); onBack(); }} className="text-slate-500 hover:text-slate-700 p-1">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <span className="text-sm font-bold text-slate-500 tabular-nums">
+          {solved.size} / {grid.length}
+        </span>
+        <div className="w-24 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+            style={{ width: `${(solved.size / grid.length) * 100}%` }}
+          />
+        </div>
+      </header>
+
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 gap-5">
+        <p className="text-slate-500 font-medium text-sm">听一听，点一点 👂</p>
+
+        <button
+          onClick={speakTarget}
+          className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center hover:bg-indigo-200 active:scale-95 transition-all"
+        >
+          <Volume2 className="w-8 h-8 text-indigo-600" />
+        </button>
+
+        {/* 3×3 Grid */}
+        <div className="grid grid-cols-3 gap-2.5 sm:gap-3 w-full max-w-xs sm:max-w-sm">
+          {grid.map((item, idx) => {
+            const isSolved = solved.has(idx);
+            const isShaking = shaking === idx;
+
+            let style = "bg-white border-slate-200 text-slate-800 hover:border-indigo-300 hover:shadow-md";
+            if (isSolved) {
+              style = "bg-emerald-50 border-emerald-400 text-emerald-600";
+            }
+
+            return (
+              <motion.button
+                key={item.char}
+                onClick={() => handleTap(idx)}
+                disabled={isSolved}
+                animate={isShaking ? { x: [0, -8, 8, -8, 8, 0] } : {}}
+                transition={isShaking ? { duration: 0.4 } : {}}
+                className={`border-2 rounded-2xl aspect-square flex items-center justify-center font-bold text-3xl sm:text-4xl transition-all ${style} ${isSolved ? "opacity-60" : "active:scale-95"}`}
+              >
+                {item.char}
+                {isSolved && (
+                  <Check className="w-5 h-5 text-emerald-500 absolute -top-1 -right-1" />
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ListenQuizResults({
+  result,
+  grid,
+  onRetry,
+  onBack,
+}: {
+  result: ListenQuizResult;
+  grid: CharItem[];
+  onRetry: () => void;
+  onBack: () => void;
+}) {
+  const perfect = result.totalMistakes === 0;
+  const [showCard, setShowCard] = useState<CharItem | null>(null);
+
+  // Play victory music on perfect score
+  useEffect(() => {
+    if (perfect) {
+      const timer = setTimeout(playVictoryMusic, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [perfect]);
+
+  // Collect all unique chars involved in mistakes
+  const mistakeChars = new Map<string, { item: CharItem; asTarget: boolean; asWrongTap: boolean }>();
+  for (const m of result.mistakes) {
+    const key = m.target.char;
+    const existing = mistakeChars.get(key);
+    if (existing) {
+      existing.asTarget = true;
+    } else {
+      mistakeChars.set(key, { item: m.target, asTarget: true, asWrongTap: false });
+    }
+    for (const wrongChar of m.wrongTaps) {
+      const wrongItem = grid.find((c) => c.char === wrongChar) || allChars.find((c) => c.char === wrongChar);
+      if (!wrongItem) continue;
+      const ex = mistakeChars.get(wrongChar);
+      if (ex) {
+        ex.asWrongTap = true;
+      } else {
+        mistakeChars.set(wrongChar, { item: wrongItem, asTarget: false, asWrongTap: true });
+      }
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-dvh">
+      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 shrink-0">
+        <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <h1 className="font-bold text-slate-800 text-lg">听音选字结果</h1>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 max-w-lg mx-auto w-full">
+        <div className="text-center mb-8">
+          <p className="text-6xl font-bold mb-2">{perfect ? "🎉" : "💪"}</p>
+          <p className="text-2xl font-bold text-slate-800">
+            {perfect ? "全部正确！太棒了！" : `完成了！错了 ${result.totalMistakes} 次`}
+          </p>
+          <p className="text-slate-500 mt-1">
+            {perfect ? "一次都没选错，真厉害！" : "下面是需要复习的字"}
+          </p>
+        </div>
+
+        {/* Mistake review */}
+        {!perfect && (
+          <div className="mb-8 space-y-3">
+            <h2 className="font-bold text-slate-700">需要复习的字</h2>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {[...mistakeChars.values()].map(({ item, asTarget, asWrongTap }) => {
+                const r = item.readings[0];
+                return (
+                  <button
+                    key={item.char}
+                    onClick={() => speakChar(item)}
+                    className={`rounded-xl border-2 p-3 flex flex-col items-center gap-1 transition-all hover:shadow-md active:scale-95 ${
+                      asTarget && asWrongTap
+                        ? "border-orange-300 bg-orange-50"
+                        : asTarget
+                        ? "border-rose-300 bg-rose-50"
+                        : "border-amber-300 bg-amber-50"
+                    }`}
+                  >
+                    <span className="text-2xl font-bold">{item.char}</span>
+                    {r && (
+                      <>
+                        <span className="text-xs text-slate-500 font-mono">{r.pinyin}</span>
+                        <span className="text-xs text-slate-600">{r.words.join("、")}</span>
+                      </>
+                    )}
+                    <span className="text-[10px] mt-0.5 text-slate-400">
+                      {asTarget && asWrongTap ? "没选对 & 被误选" : asTarget ? "没选对" : "被误选"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Card modal */}
+        <AnimatePresence>
+          {showCard && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4"
+              onClick={() => setShowCard(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 max-w-sm w-full"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <CharCard item={showCard} />
+                <button
+                  onClick={() => setShowCard(null)}
+                  className="mt-5 w-full py-2.5 rounded-xl bg-slate-100 text-slate-600 font-medium hover:bg-slate-200 transition-colors"
+                >
+                  关闭
+                </button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onRetry}
+            className="flex-1 py-3.5 rounded-xl bg-indigo-500 text-white font-bold flex items-center justify-center gap-2 hover:bg-indigo-600 active:scale-[0.98] transition-all"
+          >
+            <RotateCcw className="w-5 h-5" /> 再来一次
+          </button>
+          <button
+            onClick={onBack}
+            className="flex-1 py-3.5 rounded-xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 active:scale-[0.98] transition-all"
+          >
+            返回
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Page ─── */
 
-type Mode = "home" | "learn" | "quiz-settings" | "quiz-play" | "quiz-results";
+type Mode = "home" | "learn" | "quiz-settings" | "quiz-play" | "quiz-results" | "listen-quiz-settings" | "listen-quiz-play" | "listen-quiz-results";
 
 export default function ChineseLiteracyPage() {
   const [mode, setMode] = useState<Mode>("home");
@@ -1181,6 +1590,12 @@ export default function ChineseLiteracyPage() {
   const [quizAnswers, setQuizAnswers] = useState<QuizAnswer[]>([]);
   const [quizRound, setQuizRound] = useState(0);
   const [lastQuizConfig, setLastQuizConfig] = useState<{ groupIds: string[]; count: number } | null>(null);
+
+  // Listen quiz state
+  const [listenGroupIds, setListenGroupIds] = useState<string[]>([]);
+  const [listenResult, setListenResult] = useState<ListenQuizResult | null>(null);
+  const [listenGrid, setListenGrid] = useState<CharItem[]>([]);
+  const [listenRound, setListenRound] = useState(0);
 
   useEffect(() => setIsClient(true), []);
   useVoiceInit();
@@ -1198,12 +1613,24 @@ export default function ChineseLiteracyPage() {
     if (lastQuizConfig) startQuiz(lastQuizConfig.groupIds, lastQuizConfig.count);
   }, [lastQuizConfig, startQuiz]);
 
+  const startListenQuiz = useCallback((groupIds: string[]) => {
+    setListenGroupIds(groupIds);
+    setListenResult(null);
+    setListenRound((r) => r + 1);
+    setMode("listen-quiz-play");
+  }, []);
+
+  const retryListenQuiz = useCallback(() => {
+    if (listenGroupIds.length > 0) startListenQuiz(listenGroupIds);
+  }, [listenGroupIds, startListenQuiz]);
+
   if (!isClient) {
     return <div className="h-screen bg-slate-50 flex items-center justify-center text-slate-400">加载中...</div>;
   }
 
   if (mode === "learn") return <LearnMode onBack={() => setMode("home")} />;
   if (mode === "quiz-settings") return <QuizSettings onStart={startQuiz} onBack={() => setMode("home")} />;
+  if (mode === "listen-quiz-settings") return <ListenQuizSettings onStart={startListenQuiz} onBack={() => setMode("home")} />;
   if (mode === "quiz-play")
     return (
       <QuizPlay
@@ -1214,6 +1641,17 @@ export default function ChineseLiteracyPage() {
     );
   if (mode === "quiz-results")
     return <QuizResults key={quizRound} answers={quizAnswers} onRetry={retryQuiz} onBack={() => setMode("home")} />;
+  if (mode === "listen-quiz-play")
+    return (
+      <ListenQuizPlay
+        key={listenRound}
+        groupIds={listenGroupIds}
+        onFinish={(r, g) => { setListenResult(r); setListenGrid(g); setMode("listen-quiz-results"); }}
+        onBack={() => setMode("home")}
+      />
+    );
+  if (mode === "listen-quiz-results" && listenResult)
+    return <ListenQuizResults key={listenRound} result={listenResult} grid={listenGrid} onRetry={retryListenQuiz} onBack={() => setMode("home")} />;
 
   // Home
   const progress = isClient ? loadProgress() : new Set<string>();
@@ -1237,7 +1675,7 @@ export default function ChineseLiteracyPage() {
         )}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm sm:max-w-md">
+      <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm sm:max-w-lg">
         <button
           onClick={() => setMode("learn")}
           className="flex-1 py-5 rounded-2xl bg-white border-2 border-emerald-200 shadow-sm hover:shadow-md hover:border-emerald-400 active:scale-[0.97] transition-all text-center"
@@ -1252,7 +1690,15 @@ export default function ChineseLiteracyPage() {
         >
           <span className="text-3xl block mb-2">🧩</span>
           <span className="font-bold text-lg text-indigo-700">测验模式</span>
-          <span className="block text-xs text-slate-400 mt-1">听音辨字，检验学习</span>
+          <span className="block text-xs text-slate-400 mt-1">听音辨字，四选一</span>
+        </button>
+        <button
+          onClick={() => setMode("listen-quiz-settings")}
+          className="flex-1 py-5 rounded-2xl bg-white border-2 border-amber-200 shadow-sm hover:shadow-md hover:border-amber-400 active:scale-[0.97] transition-all text-center"
+        >
+          <span className="text-3xl block mb-2">🎮</span>
+          <span className="font-bold text-lg text-amber-700">听音选字</span>
+          <span className="block text-xs text-slate-400 mt-1">九宫格，听音点字</span>
         </button>
       </div>
 
