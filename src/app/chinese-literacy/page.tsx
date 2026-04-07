@@ -149,16 +149,19 @@ async function speakChar(item: CharItem) {
   const myId = _abortId;
 
   if (item.readings.length === 1) {
-    // Single reading: try pre-recorded, fallback to browser TTS
-    const pre = playPrerecorded(item.char);
-    if (pre) { await pre; return; }
     const r = item.readings[0];
-    const text = `${item.char}，，${r.words.join("，，")}`;
-    await wait(100, myId);
-    if (myId !== _abortId) return;
-    const u = makeUtterance(text);
-    if (!u) return;
-    window.speechSynthesis.speak(u);
+    // Pre-recorded audio already includes char+words+explain (if any)
+    const pre = playPrerecorded(item.char);
+    if (pre) {
+      await pre;
+    } else {
+      const text = `${item.char}，，${r.words.join("，，")}`;
+      await wait(100, myId);
+      if (myId !== _abortId) return;
+      const u = makeUtterance(text);
+      if (!u) return;
+      await new Promise<void>((resolve) => { u.onend = () => resolve(); u.onerror = () => resolve(); window.speechSynthesis.speak(u); });
+    }
     return;
   }
 
@@ -171,6 +174,15 @@ async function speakChar(item: CharItem) {
     const pre = playPrerecorded(item.char, r.pinyin);
     if (pre) await pre;
     else await speakAndWait(r.words.join("，，"), myId);
+  }
+  // Polyphonic chars with explain: play pre-recorded explain audio
+  if (item.explain) {
+    if (myId !== _abortId) return;
+    await wait(400, myId);
+    if (myId !== _abortId) return;
+    const explainPre = playPrerecorded(`${item.char}_explain`);
+    if (explainPre) await explainPre;
+    else await speakAndWait(item.explain, myId);
   }
 }
 
@@ -329,8 +341,9 @@ function LearnMode({ onBack }: { onBack: () => void }) {
     });
   }, [card]);
 
-  const prev = () => setCardIdx((i) => Math.max(0, i - 1));
+  const prev = () => { stopAll(); setCardIdx((i) => Math.max(0, i - 1)); };
   const next = () => {
+    stopAll();
     if (cardIdx < group.chars.length - 1) {
       setCardIdx((i) => i + 1);
     } else if (groupIdx < charGroups.length - 1) {
@@ -339,7 +352,7 @@ function LearnMode({ onBack }: { onBack: () => void }) {
       setCardIdx(0);
     }
   };
-  const selectGroup = (i: number) => { setGroupIdx(i); setCardIdx(0); setSidebarOpen(false); };
+  const selectGroup = (i: number) => { stopAll(); setGroupIdx(i); setCardIdx(0); setSidebarOpen(false); };
 
   const learnedInGroup = group.chars.filter((c) => learned.has(c.char)).length;
   const isLastCard = cardIdx === group.chars.length - 1;
@@ -994,6 +1007,55 @@ function QuizPlay({
   );
 }
 
+/* ─── 8-bit Victory Celebration Music ─── */
+
+function playVictoryMusic() {
+  try {
+    const ctx = new AudioContext();
+    const bpm = 240;
+    const beat = 60 / bpm;
+
+    const playNote = (freq: number, start: number, dur: number, vol = 0.1, type: OscillatorType = "square") => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(vol, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur + 0.02);
+    };
+
+    // Short silly fanfare ~1.5s
+    const C5=523.25, E5=659.25, G5=783.99, C6=1046.5, E6=1318.5;
+    const notes: [number, number, OscillatorType?][] = [
+      [C5, 1], [E5, 1], [G5, 1], [C6, 0.5],
+      [G5, 0.5], [C6, 0.5], [E6, 2, "sawtooth"],
+      // Goofy wobble ending
+      [C6, 0.4], [E6, 0.4], [C6, 0.4], [E6, 0.4], [G5, 0.4], [C6, 1.5],
+    ];
+
+    let t = 0;
+    for (const [freq, dur, type] of notes) {
+      playNote(freq, t, dur * beat, 0.09, type || "square");
+      t += dur * beat;
+    }
+
+    // Silly low "boing" at the end
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(300, ctx.currentTime + t);
+    osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + t + 0.3);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime + t);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.4);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(ctx.currentTime + t);
+    osc.stop(ctx.currentTime + t + 0.5);
+  } catch {}
+}
+
 /* ─── Quiz Results ─── */
 
 function QuizResults({
@@ -1011,6 +1073,14 @@ function QuizResults({
   const wrong = answers.filter((a) => !a.isCorrect);
 
   const [showCard, setShowCard] = useState<CharItem | null>(null);
+
+  // Play victory music on 100%
+  useEffect(() => {
+    if (pct === 100) {
+      const timer = setTimeout(playVictoryMusic, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [pct]);
 
   return (
     <div className="flex flex-col h-dvh">
@@ -1109,6 +1179,7 @@ export default function ChineseLiteracyPage() {
   // Quiz state
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [quizAnswers, setQuizAnswers] = useState<QuizAnswer[]>([]);
+  const [quizRound, setQuizRound] = useState(0);
   const [lastQuizConfig, setLastQuizConfig] = useState<{ groupIds: string[]; count: number } | null>(null);
 
   useEffect(() => setIsClient(true), []);
@@ -1118,6 +1189,7 @@ export default function ChineseLiteracyPage() {
     const questions = generateQuiz(groupIds, count);
     setQuizQuestions(questions);
     setQuizAnswers([]);
+    setQuizRound((r) => r + 1);
     setLastQuizConfig({ groupIds, count });
     setMode("quiz-play");
   }, []);
@@ -1141,7 +1213,7 @@ export default function ChineseLiteracyPage() {
       />
     );
   if (mode === "quiz-results")
-    return <QuizResults answers={quizAnswers} onRetry={retryQuiz} onBack={() => setMode("home")} />;
+    return <QuizResults key={quizRound} answers={quizAnswers} onRetry={retryQuiz} onBack={() => setMode("home")} />;
 
   // Home
   const progress = isClient ? loadProgress() : new Set<string>();

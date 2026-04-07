@@ -522,5 +522,8 @@
   "乐-lè": "/audio/乐-le4.mp3",
   "乐-yuè": "/audio/乐-yue4.mp3",
   "脏-zāng": "/audio/脏-zang1.mp3",
-  "脏-zàng": "/audio/脏-zang4.mp3"
+  "脏-zàng": "/audio/脏-zang4.mp3",
+  "干_explain": "/audio/干_explain.mp3",
+  "行_explain": "/audio/行_explain.mp3",
+  "空_explain": "/audio/空_explain.mp3"
 }
