@@ -1060,10 +1060,12 @@ function playVictoryMusic() {
 
 function QuizResults({
   answers,
+  groupIds,
   onRetry,
   onBack,
 }: {
   answers: QuizAnswer[];
+  groupIds: string[];
   onRetry: () => void;
   onBack: () => void;
 }) {
@@ -1147,6 +1149,34 @@ function QuizResults({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Quiz summary - tested range and all chars */}
+        <div className="mb-8">
+          <h3 className="font-bold text-slate-700 mb-2">测验总结</h3>
+          <p className="text-xs text-slate-500 mb-3">
+            出题范围：{groupIds.map((id) => charGroups.find((g) => g.id === id)?.name).filter(Boolean).join("、")}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {answers.map((a) => {
+              const r = a.question.correct.readings[a.question.readingIdx];
+              return (
+                <button
+                  key={a.question.correct.char + a.question.readingIdx}
+                  onClick={() => { speakChar(a.question.correct); setShowCard(a.question.correct); }}
+                  className={`px-2.5 py-1.5 rounded-lg border text-base font-bold transition-all hover:shadow-sm active:scale-95 ${
+                    a.isCorrect
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-rose-200 bg-rose-50 text-rose-700"
+                  }`}
+                  title={`${r.pinyin} ${r.words.join("、")}`}
+                >
+                  {a.question.correct.char}
+                  {a.isCorrect ? <Check className="w-3 h-3 inline ml-0.5 -mt-0.5" /> : <XIcon className="w-3 h-3 inline ml-0.5 -mt-0.5" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Actions */}
         <div className="flex gap-3">
@@ -1436,11 +1466,13 @@ function ListenQuizPlay({
 function ListenQuizResults({
   result,
   grid,
+  groupIds,
   onRetry,
   onBack,
 }: {
   result: ListenQuizResult;
   grid: CharItem[];
+  groupIds: string[];
   onRetry: () => void;
   onBack: () => void;
 }) {
@@ -1558,6 +1590,34 @@ function ListenQuizResults({
           )}
         </AnimatePresence>
 
+        {/* Quiz summary */}
+        <div className="mb-8">
+          <h3 className="font-bold text-slate-700 mb-2">测验总结</h3>
+          <p className="text-xs text-slate-500 mb-3">
+            出题范围：{groupIds.map((id) => charGroups.find((g) => g.id === id)?.name).filter(Boolean).join("、")}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {grid.map((item) => {
+              const hasMistake = result.mistakes.some((m) => m.target.char === item.char || m.wrongTaps.includes(item.char));
+              return (
+                <button
+                  key={item.char}
+                  onClick={() => speakChar(item)}
+                  className={`px-2.5 py-1.5 rounded-lg border text-base font-bold transition-all hover:shadow-sm active:scale-95 ${
+                    hasMistake
+                      ? "border-rose-200 bg-rose-50 text-rose-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                  title={item.readings[0]?.pinyin + " " + item.readings[0]?.words.join("、")}
+                >
+                  {item.char}
+                  {hasMistake ? <XIcon className="w-3 h-3 inline ml-0.5 -mt-0.5" /> : <Check className="w-3 h-3 inline ml-0.5 -mt-0.5" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="flex gap-3">
           <button
             onClick={onRetry}
@@ -1640,7 +1700,7 @@ export default function ChineseLiteracyPage() {
       />
     );
   if (mode === "quiz-results")
-    return <QuizResults key={quizRound} answers={quizAnswers} onRetry={retryQuiz} onBack={() => setMode("home")} />;
+    return <QuizResults key={quizRound} answers={quizAnswers} groupIds={lastQuizConfig?.groupIds ?? []} onRetry={retryQuiz} onBack={() => setMode("home")} />;
   if (mode === "listen-quiz-play")
     return (
       <ListenQuizPlay
@@ -1651,7 +1711,7 @@ export default function ChineseLiteracyPage() {
       />
     );
   if (mode === "listen-quiz-results" && listenResult)
-    return <ListenQuizResults key={listenRound} result={listenResult} grid={listenGrid} onRetry={retryListenQuiz} onBack={() => setMode("home")} />;
+    return <ListenQuizResults key={listenRound} result={listenResult} grid={listenGrid} groupIds={listenGroupIds} onRetry={retryListenQuiz} onBack={() => setMode("home")} />;
 
   // Home
   const progress = isClient ? loadProgress() : new Set<string>();
