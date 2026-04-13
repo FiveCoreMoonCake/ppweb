@@ -58,7 +58,7 @@ ppweb/
 │   │   └── article/
 │   │       └── page.mdx              # MDX 文章 demo
 │   ├── lib/                          # 共享基础设施
-│   │   ├── supabase.ts               # Supabase 客户端初始化 (6 行)
+│   │   ├── supabase.ts               # Supabase 客户端 (懒初始化 Proxy，防 SSR/构建崩溃)
 │   │   ├── auth-context.tsx          # AuthProvider + useAuth hook (118 行)
 │   │   ├── require-auth.tsx          # RequireAuth 登录守卫组件 (39 行)
 │   │   └── migrate-local-data.ts     # localStorage → Supabase 数据迁移 (274 行)
@@ -282,14 +282,39 @@ npm run lint         # 代码检查
 
 ### 环境变量（`.env.local`，不入库）
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://wdfzzkrcvflkwqyacofl.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...（anon public key）
 ```
+
+> 参见 `.env.example` 了解所需变量列表。
+
+### Supabase 客户端初始化
+
+`src/lib/supabase.ts` 使用 **Proxy 懒初始化**模式：
+- `createClient()` 不在模块顶层执行，而是延迟到首次属性访问时才创建
+- 防止 Next.js 静态页面生成（如 `/_not-found`）时因环境变量不可用而构建崩溃
+- 其他文件照常 `import { supabase }` 使用，无需关心初始化细节
 
 ### Supabase 配置
 - **Auth Providers**: Google OAuth + Email (Magic Link)
 - **Google OAuth 回调地址**: `https://<项目ID>.supabase.co/auth/v1/callback`
 - **RLS**: 所有表已启用 Row Level Security
+
+### Vercel 部署
+
+项目通过 GitHub 仓库自动部署到 Vercel。首次部署或更换环境需配置：
+
+1. **Vercel 环境变量**：在 Vercel Dashboard → Settings → Environment Variables 添加：
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - Environment 选择 All（Production + Preview + Development）
+
+2. **Supabase OAuth 重定向**：在 Supabase Dashboard → Authentication → URL Configuration：
+   - **Site URL** 设置为 Vercel 线上地址（如 `https://ppweb-xxx.vercel.app`）
+   - **Redirect URLs** 添加 `https://ppweb-xxx.vercel.app/**`（通配所有子路径）
+   - 本地开发保留 `http://localhost:3000/**`
+
+> ⚠️ 修改 Vercel 环境变量后需手动触发 Redeploy 才生效。
 
 ---
 
@@ -338,6 +363,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...（anon public key）
 ## 9. Git 提交历史摘要 (近期)
 
 ```
+5287b0c fix: harden Supabase proxy against SSR symbol probing
+af9eab2 fix: lazy-init Supabase client to fix Vercel build failure
+581bb2b feat: 用户系统 + 智能出题 + 易错字表
 255e086 docs: 添加项目框架文档 PROJECT_GUIDE.md
 0f79897 feat: 优化出题范围选择，快捷按钮+单击微调
 66ac75d feat: 测验结果页显示出题范围和测验内容总结
@@ -361,7 +389,7 @@ f708637 feat: 统一抽象字语音为预录音频，翻页停止播放
 | 修改认证逻辑 | `src/lib/auth-context.tsx` |
 | 修改登录守卫 | `src/lib/require-auth.tsx` |
 | 修改数据迁移 | `src/lib/migrate-local-data.ts` |
-| Supabase 客户端配置 | `src/lib/supabase.ts` + `.env.local` |
+| Supabase 客户端配置 | `src/lib/supabase.ts`（懒初始化 Proxy）+ `.env.local` |
 | 修改全局样式/字体 | `src/app/globals.css` + `src/app/layout.tsx` |
 | 添加/修改汉字数据 | `src/data/characters.ts` |
 | 修改识字学习/测验逻辑 | `src/app/chinese-literacy/page.tsx` |
