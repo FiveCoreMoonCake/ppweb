@@ -2,14 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let _supabase: SupabaseClient | null = null;
 
-/**
- * Lazy-initialised Supabase client.
- *
- * Using a getter avoids calling `createClient()` at module-load time,
- * which would crash during Next.js static page generation (e.g. /_not-found)
- * when environment variables are not yet available.
- */
-export function getSupabase(): SupabaseClient {
+function getSupabase(): SupabaseClient {
   if (!_supabase) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -27,12 +20,24 @@ export function getSupabase(): SupabaseClient {
 }
 
 /**
- * Re-exported for backward compatibility.
- * ⚠️  This is a proxy — property access is forwarded to the lazily created
- *     client, so the real `createClient` call is deferred until first use.
+ * Lazily-initialised Supabase client.
+ *
+ * During Next.js static generation / SSR the env vars may not exist yet,
+ * so we defer `createClient()` until the property is actually accessed
+ * at runtime in the browser (inside useEffect / event handlers).
+ *
+ * The Proxy also guards against SSR access: if code running on the server
+ * tries to use the client before env vars are set, it will throw a clear
+ * error instead of silently sending requests with undefined credentials.
  */
 export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
   get(_target, prop, receiver) {
+    // Allow certain built-in symbol access that bundlers / React may probe
+    // during SSR without actually needing the real client.
+    if (typeof prop === "symbol") return undefined;
+    if (prop === "then") return undefined; // Prevent Promise-like detection
+    if (prop === "toJSON") return undefined;
+
     return Reflect.get(getSupabase(), prop, receiver);
   },
 });
