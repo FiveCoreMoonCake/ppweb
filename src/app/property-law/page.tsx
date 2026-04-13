@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { RequireAuth } from "@/lib/require-auth";
 import ReactECharts from "echarts-for-react";
 import { BookOpen, RefreshCw, Key, ShieldAlert, X } from "lucide-react";
 import { propertyLawData } from "@/data/property-law";
@@ -100,7 +101,11 @@ function getItemsForNode(nodeName: string) {
   return [];
 }
 
-export default function PropertyLawMindMap() {
+export default function PropertyLawPage() {
+  return <RequireAuth><PropertyLawMindMapInner /></RequireAuth>;
+}
+
+function PropertyLawMindMapInner() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
   const isMobile = useIsMobile();

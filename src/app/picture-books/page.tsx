@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { RequireAuth } from "@/lib/require-auth";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -601,6 +602,10 @@ function BookShelf({ onSelect }: { onSelect: (bookId: string) => void }) {
 
 /* ─── Main Page ─── */
 export default function PictureBookPage() {
+  return <RequireAuth><PictureBooksInner /></RequireAuth>;
+}
+
+function PictureBooksInner() {
   const [selectedBook, setSelectedBook] = useState<string | null>(null);
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(false);

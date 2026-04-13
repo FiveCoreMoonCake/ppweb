@@ -12,10 +12,10 @@
 | 模块 | 路由 | 面向人群 | 核心功能 |
 |------|------|----------|----------|
 | 地产权与未来利益通关表 | `/property-law` | 法学学习者 | Property Law MBE 交互式思维导图 |
-| 中文识字 | `/chinese-literacy` | 学龄前儿童 | 字卡学习 + 听音辨字测验 + 九宫格游戏 |
+| 中文识字 | `/chinese-literacy` | 学龄前儿童 | 字卡学习 + 智能测验 + 九宫格游戏 + 易错字表 |
 | 绘本馆 | `/picture-books` | 儿童 | 有声绘本逐字高亮朗读 |
 
-**定位**: 纯前端、无后端、无数据库、无登录，数据全部在客户端/静态文件中。
+**定位**: 前端 + Supabase BaaS，支持用户登录和多设备数据同步。
 
 ---
 
@@ -31,6 +31,7 @@
 | 图标 | Lucide React | 1.7.0 |
 | 图表 | ECharts + echarts-for-react | 6.0.0 / 3.0.6 |
 | 内容 | MDX (@next/mdx) | - |
+| 后端/Auth/DB | Supabase (Auth + PostgreSQL) | @supabase/supabase-js |
 | 构建 | Turbopack (Next.js 16 默认) | - |
 
 **重要**: 此项目使用 **Next.js 16**，与旧版有重大变化。编写代码前务必阅读 `node_modules/next/dist/docs/` 中的文档。
@@ -43,17 +44,24 @@
 ppweb/
 ├── src/
 │   ├── app/                          # Next.js App Router 页面
-│   │   ├── layout.tsx                # 根布局 (字体: Geist Sans/Mono, 元数据)
-│   │   ├── page.tsx                  # 首页 - 工具卡片列表 ("use client")
+│   │   ├── layout.tsx                # 根布局 (字体 + AuthProvider 包裹)
+│   │   ├── page.tsx                  # 首页 - 工具列表 + 右上角登录/头像 (133 行)
 │   │   ├── globals.css               # 全局样式 (Tailwind v4 + CSS 变量)
+│   │   ├── login/
+│   │   │   └── page.tsx              # 登录页 - Google OAuth + Magic Link (190 行)
 │   │   ├── chinese-literacy/
-│   │   │   └── page.tsx              # 中文识字工具 (1772 行, 最复杂的模块)
+│   │   │   └── page.tsx              # 中文识字工具 (2133 行, 最复杂的模块)
 │   │   ├── picture-books/
-│   │   │   └── page.tsx              # 绘本馆 (645 行)
+│   │   │   └── page.tsx              # 绘本馆 (650 行)
 │   │   ├── property-law/
-│   │   │   └── page.tsx              # 地产权思维导图 (382 行)
+│   │   │   └── page.tsx              # 地产权思维导图 (387 行)
 │   │   └── article/
 │   │       └── page.mdx              # MDX 文章 demo
+│   ├── lib/                          # 共享基础设施
+│   │   ├── supabase.ts               # Supabase 客户端初始化 (6 行)
+│   │   ├── auth-context.tsx          # AuthProvider + useAuth hook (118 行)
+│   │   ├── require-auth.tsx          # RequireAuth 登录守卫组件 (39 行)
+│   │   └── migrate-local-data.ts     # localStorage → Supabase 数据迁移 (274 行)
 │   ├── data/                         # 静态数据模块
 │   │   ├── characters.ts             # 汉字数据 (693 行, 500+字分25组)
 │   │   ├── property-law.ts           # 地产权法学数据 (113 行)
@@ -62,63 +70,77 @@ ppweb/
 ├── public/                           # 静态资源
 │   ├── audio/                        # 汉字发音 MP3 (528 个文件)
 │   │   ├── manifest.json             # 字 → MP3 路径映射表
-│   │   ├── 一.mp3, 二.mp3, ...       # 单字发音
-│   │   └── 大-dài.mp3, ...           # 多音字特定读音
+│   │   └── *.mp3                     # 单字发音 + 多音字特定读音
 │   └── books/                        # 绘本数据
-│       └── rabbit-carrot/            # 《小白兔找萝卜》
-│           ├── book.json             # 书籍元数据 (页面、文字、词边界)
-│           └── p1.mp3 ~ p10.mp3      # 各页音频
-├── scripts/                          # 构建/数据生成脚本
-│   ├── gen_audio.py                  # Azure TTS 批量生成汉字音频
-│   ├── gen_book_audio.py             # 生成绘本音频
-│   ├── gen_explain_audio.py          # 生成汉字解释音频
-│   ├── gen_characters.js             # 生成汉字数据
-│   ├── parse_chars.js                # 解析汉字源数据
-│   ├── regroup.js                    # 重新分组汉字
-│   └── debug_explain.py              # 调试用
+│       └── rabbit-carrot/            # 《小白兔找萝卜》(book.json + p1~p10.mp3)
+├── scripts/                          # 构建/数据生成脚本 (Python + Node.js)
+├── .env.local                        # Supabase URL + anon key (不入库)
 ├── next.config.mjs                   # Next.js 配置 (MDX + remark 插件)
 ├── package.json                      # 依赖管理
 ├── tsconfig.json                     # TypeScript 配置
-├── postcss.config.mjs                # PostCSS (Tailwind v4)
-├── eslint.config.mjs                 # ESLint flat config
-├── CLAUDE.md                         # Agent 指令入口 → 引用 AGENTS.md
-└── AGENTS.md                         # Agent 行为约束
+└── CLAUDE.md → AGENTS.md             # Agent 行为约束
 ```
 
 ---
 
 ## 4. 核心架构模式
 
-### 4.1 所有页面均为 Client Component
+### 4.1 用户认证与登录流程
 
-每个页面文件顶部都有 `"use client"` 指令。原因：大量使用浏览器 API（Web Speech API、AudioContext、localStorage、window resize）。
+```
+用户打开网站 → 首页自由浏览（无需登录）
+    │
+    └── 点击任意游戏工具 → RequireAuth 检查登录状态
+            ├── 已登录 → 进入游戏
+            └── 未登录 → 跳转 /login?redirect=xxx
+                          ├── Google OAuth 一键登录
+                          └── 邮箱 Magic Link 登录
+                          → 登录成功 → 自动迁移 localStorage 老数据 → 跳回游戏页
+```
 
-### 4.2 状态管理：纯 React Hooks + localStorage
+**关键组件：**
+- `AuthProvider`（`src/lib/auth-context.tsx`）：全局 React Context，提供 `useAuth()` hook
+- `RequireAuth`（`src/lib/require-auth.tsx`）：游戏页面守卫，未登录自动跳转
+- `migrateLocalData`（`src/lib/migrate-local-data.ts`）：首次登录时自动迁移 localStorage 数据
 
-- **无**外部状态管理库 (无 Redux/Zustand/Context)
-- 组件内 `useState` + `useRef` 管理运行时状态
-- `localStorage` 持久化用户学习进度：
-  - `"chinese-literacy-progress"` → 已学汉字集合
-  - `"chinese-literacy-records"` → 间隔重复学习记录
+### 4.2 数据持久化：Supabase PostgreSQL
 
-### 4.3 数据层：全静态，无 API
+**数据流**：前端 → Supabase JS SDK → Supabase PostgreSQL（直连，无 API Routes）
 
-- **TypeScript 数据模块** (`src/data/`) → 编译时嵌入
-- **静态 JSON** (`public/books/`) → 运行时 fetch
-- **音频清单** (`public/audio/manifest.json`) → 运行时 fetch
-- 无后端、无数据库、无 API 路由
+**Supabase 表结构：**
+| 表名 | 用途 | RLS |
+|------|------|-----|
+| `profiles` | 用户信息（昵称、头像） | 所有人可读，本人可写 |
+| `game_stats` | 排行榜数据（预留） | 所有人可读，本人可写 |
+| `literacy_records` | 识字游戏 - 每字学习记录 | 本人可读写 |
+| `literacy_progress` | 识字游戏 - 已浏览的字 | 本人可读写 |
+
+**识字游戏学习记录（`literacy_records`）：**
+```sql
+(user_id, char, right_count, wrong_count, level, last_seen, next_review, mastered)
+-- level: 0~5 对应遗忘曲线等级
+-- UNIQUE(user_id, char)
+```
+
+**排行榜数据（`game_stats`，预留）：**
+```sql
+(user_id, game_id, total_days, streak_days, last_played_at, mastered_count, total_attempts, correct_attempts)
+-- UNIQUE(user_id, game_id)
+```
+
+### 4.3 所有页面均为 Client Component
+
+每个页面文件顶部都有 `"use client"` 指令。原因：大量使用浏览器 API + Supabase 实时交互。
 
 ### 4.4 样式：Tailwind v4 Utility-First
 
 - `globals.css` 通过 `@import "tailwindcss"` 引入
-- `@theme inline` 注册 CSS 变量到 Tailwind
 - 全部使用原子类，无组件库
-- 响应式断点: `sm:` (640px)
+- 配色：slate 基底，indigo 强调色，rose 用于错误/易错相关 UI
 
 ### 4.5 动画：Framer Motion
 
 - `<AnimatePresence>` + `<motion.div>` 用于页面/模式切换过渡
-- `initial` / `animate` / `exit` 属性控制进场/退场
 
 ---
 
@@ -126,19 +148,21 @@ ppweb/
 
 ### 5.1 首页 Portal (`/` → `src/app/page.tsx`)
 
-**97 行** | 工具列表展示页
+**133 行** | 工具列表展示页
 
-- 从 `src/data/tools.ts` 读取工具注册信息
-- 按 `category` 分组显示（law → kids → other）
-- 每个工具渲染为带 emoji 图标、描述、标签的卡片
-- 点击卡片跳转对应路由
+- 从 `src/data/tools.ts` 读取工具注册信息，按 category 分组
+- **右上角**：未登录显示"登录"链接，已登录显示用户头像 + 退出按钮
+- 首页不需要登录即可浏览
 
-**添加新工具时需要做的事**:
-1. 在 `src/data/tools.ts` 的 `tools` 数组添加新条目
-2. 在 `src/app/<route>/page.tsx` 创建新页面
-3. 首页会自动展示新工具卡片
+### 5.2 登录页 (`/login` → `src/app/login/page.tsx`)
 
-### 5.2 中文识字 (`/chinese-literacy` → 1772 行)
+**190 行** | 独立登录页
+
+- Google OAuth 一键登录 + 邮箱 Magic Link
+- 接收 `?redirect=xxx` 参数，登录后跳回原页面
+- 用 `<Suspense>` 包裹（Next.js 16 要求 useSearchParams 必须在 Suspense 内）
+
+### 5.3 中文识字 (`/chinese-literacy` → 2133 行)
 
 **最复杂的模块**，包含多个子模式：
 
@@ -147,7 +171,8 @@ ppweb/
 Menu（主菜单）
 ├── Learn（字卡学习）→ LearnDone（学习完成）
 ├── QuizSettings（测验设置）→ QuizPlay（答题）→ QuizResult（结果）
-└── ListenQuizSettings → ListenQuiz（九宫格游戏）→ ListenResult（结果）
+├── ListenQuizSettings → ListenQuiz（九宫格游戏）→ ListenResult（结果）
+└── WrongList（易错字表）→ 可发起专项测验
 ```
 
 #### 核心数据结构
@@ -159,76 +184,55 @@ interface CharItem {
   explain?: string;       // 解释
 }
 
-interface CharReading {
-  pinyin: string;         // 拼音
-  words: string[];        // 组词
-  emoji: string;          // 配图 emoji
+interface CharRecord {
+  right: number;          // 累计正确次数
+  wrong: number;          // 累计错误次数
+  lastSeen: string;       // ISO 日期
+  nextReview: string;     // ISO 日期
+  interval: number;       // 遗忘曲线等级 (0~5)，映射 EBBINGHAUS_INTERVALS
 }
 ```
+
+#### 智能出题算法（`generateQuiz`）
+按比例分配出题，替代了之前的纯随机：
+
+| 优先级 | 类别 | 条件 | 占比 |
+|--------|------|------|------|
+| 1 | 易错字 | 正确率 < 50% 且答题 ≥ 3 次 | ~40% |
+| 2 | 遗忘曲线到期 | nextReview ≤ 今天 | ~30% |
+| 3 | 新字 | 从未答题 | ~20% |
+| 4 | 随机补充 | 其余字 | ~10% |
+
+#### 遗忘曲线（`recordAnswerLocal`）
+```
+EBBINGHAUS_INTERVALS = [1, 2, 4, 7, 15, 30] 天
+level:                   0  1  2  3   4   5
+
+答对 → level + 1, nextReview = today + intervals[level]
+答错 → level = 0, nextReview = today + 1
+level 5 答对 → mastered = true
+```
+
+#### 易错字表（`WrongList` 组件）
+- 筛选：正确率 < 50% 且答题次数 ≥ 3
+- 展示：字 + 正确率进度条 + 错误/总次数 + 发音按钮
+- 可发起专项测验（只出易错字）
 
 #### 语音系统 (TTS + 预录音频)
-- **优先使用预录 MP3** (`public/audio/`)：通过 `manifest.json` 查找
-- **回退到 Web Speech API**：按优先级选择中文语音引擎 (Tingting > Lili > Meijia > ...)
-- **全局中断机制**：`_abortId` 递增实现任意时刻打断播放
-- **音效**：AudioContext 合成 (正确/错误/胜利音效)
+- 优先使用预录 MP3 → 回退到 Web Speech API
+- 全局中断机制：`_abortId` 递增
+- 音效：AudioContext 合成
 
-#### 间隔重复算法
-- 答对 → interval 翻倍 (最大 64 天)
-- 答错 → interval 重置为 1
-- 出题优先级: 到期复习 > 高错误率 > 新字 > 其余
+### 5.4 绘本馆 (`/picture-books` → 650 行)
 
-### 5.3 绘本馆 (`/picture-books` → 645 行)
+- 书架 → 阅读器，音频逐字高亮，自动翻页
+- RequireAuth 守卫
+- 目前 1 本书：《小白兔找萝卜》
 
-#### 核心数据结构
-```typescript
-interface BookPage {
-  text: string;           // 页面文字
-  subtitle?: string;      // 副标题
-  audio: string;          // 音频文件路径
-  words: WordBoundary[];  // 逐字时间轴
-  emoji?: string;         // 背景 emoji
-  bg?: string;            // 背景颜色
-  vocab?: VocabItem[];    // 生词表
-}
+### 5.5 地产权思维导图 (`/property-law` → 387 行)
 
-interface WordBoundary {
-  w: string;  // 词
-  s: number;  // 起始时间 (秒)
-  e: number;  // 结束时间 (秒)
-}
-```
-
-#### 功能特性
-- **书架** → **阅读器** 两层界面
-- 音频播放时逐字高亮跟读 (`requestAnimationFrame` 驱动)
-- 自动翻页播放模式
-- 生词弹窗 (悬停/点击触发，带 TTS 朗读)
-- 目前仅 1 本书: 《小白兔找萝卜》(10 页)
-
-### 5.4 地产权思维导图 (`/property-law` → 382 行)
-
-#### 核心数据结构
-```typescript
-interface PropertyLawItem {
-  id: string;
-  name: string;           // 地产权类型名称
-  magicWords: string[];   // 法律关键词
-  futureInterest: {       // 配对的未来利益
-    name: string;
-    holder: string;
-    mechanism: string;     // 自动收回/主动行权
-  };
-  caseStudy: string;      // 案例
-  tricks: string;         // 考场陷阱提示
-}
-```
-
-#### 功能特性
-- **ECharts tree 图表**: 展示土地地产权体系层级
-- **桌面端**: 左右布局，图表 + 侧边详情面板
-- **移动端**: 上下布局，图表 + 底部抽屉面板
-- 响应式: `useIsMobile(768)` hook 检测
-- 移动端树图标签仅显示中文 (去掉英文)
+- ECharts tree 图表，响应式双端布局
+- RequireAuth 守卫
 
 ---
 
@@ -236,29 +240,32 @@ interface PropertyLawItem {
 
 ```typescript
 // src/data/tools.ts
-interface Tool {
-  id: string;
-  title: string;
-  description: string;
-  href: string;
-  icon: string;           // emoji
-  category: "law" | "kids" | "other";
-  tags: string[];
-}
+interface Tool { id, title, description, href, icon: string, category: "law"|"kids"|"other", tags }
 
 // src/data/characters.ts
 interface CharItem { char, readings: CharReading[], groupId, explain? }
 interface CharReading { pinyin, words: string[], emoji }
 interface CharGroup { id, name, chars: CharItem[] }
 
-// src/data/property-law.ts
-interface PropertyLawItem { id, name, magicWords[], futureInterest, caseStudy, tricks }
+// chinese-literacy (内联在 page.tsx)
+interface CharRecord { right, wrong, lastSeen, nextReview, interval }
+// interval 现在是 level (0~5)，不再是天数
 
-// picture-books (内联在 page.tsx)
-interface Book { id, title, author, ageRange, pages: BookPage[] }
-interface BookPage { text, subtitle?, audio, words: WordBoundary[], emoji?, bg?, vocab? }
-interface WordBoundary { w, s, e }
-interface VocabItem { word, pinyin, meaning }
+// src/lib/auth-context.tsx
+interface AuthContextValue {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  signInWithGoogle: () => Promise<void>;
+  signInWithMagicLink: (email: string) => Promise<{ error: string | null }>;
+  signOut: () => Promise<void>;
+}
+
+// Supabase tables
+// profiles: { id (UUID, PK), nickname, avatar_url, created_at, updated_at }
+// game_stats: { user_id, game_id, total_days, streak_days, last_played_at, mastered_count, total_attempts, correct_attempts }
+// literacy_records: { user_id, char, right_count, wrong_count, level, last_seen, next_review, mastered }
+// literacy_progress: { user_id, char, learned_at }
 ```
 
 ---
@@ -266,35 +273,23 @@ interface VocabItem { word, pinyin, meaning }
 ## 7. 构建与运行
 
 ```bash
-# 安装依赖
-npm install
-
-# 开发模式 (Turbopack)
-npm run dev        # → http://localhost:3000
-
-# 生产构建
-npm run build
-
-# 启动生产服务
-npm start
-
-# 代码检查
-npm run lint
+npm install          # 安装依赖
+npm run dev          # 开发模式 (Turbopack) → http://localhost:3000
+npm run build        # 生产构建
+npm start            # 启动生产服务
+npm run lint         # 代码检查
 ```
 
-### 音频/数据生成脚本 (按需)
-
-```bash
-# 需要 Python (.venv) + Azure Speech SDK
-python scripts/gen_audio.py           # 批量生成汉字 MP3
-python scripts/gen_book_audio.py      # 生成绘本页面音频
-python scripts/gen_explain_audio.py   # 生成汉字解释音频
-
-# Node.js 数据脚本
-node scripts/gen_characters.js        # 生成 characters.ts 数据
-node scripts/parse_chars.js           # 解析原始汉字数据
-node scripts/regroup.js               # 重新分组
+### 环境变量（`.env.local`，不入库）
 ```
+NEXT_PUBLIC_SUPABASE_URL=https://wdfzzkrcvflkwqyacofl.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...（anon public key）
+```
+
+### Supabase 配置
+- **Auth Providers**: Google OAuth + Email (Magic Link)
+- **Google OAuth 回调地址**: `https://<项目ID>.supabase.co/auth/v1/callback`
+- **RLS**: 所有表已启用 Row Level Security
 
 ---
 
@@ -302,55 +297,57 @@ node scripts/regroup.js               # 重新分组
 
 ### 8.1 新增工具的标准流程
 
-1. **注册工具**: 在 `src/data/tools.ts` 添加条目 (id, title, description, href, icon, category, tags)
-2. **创建页面**: `src/app/<tool-id>/page.tsx`，文件顶部加 `"use client"`
-3. **数据文件** (如有): 放 `src/data/<tool-id>.ts`
-4. **静态资源** (如有): 放 `public/<相关目录>/`
+1. 在 `src/data/tools.ts` 添加工具条目
+2. 创建 `src/app/<tool-id>/page.tsx`，顶部加 `"use client"`
+3. 用 `RequireAuth` 包裹页面组件
+4. 如需存储用户数据，在 Supabase 创建独立表（如 `math_records`）
 5. 首页自动展示，无需额外修改
 
-### 8.2 编码风格
+### 8.2 新增游戏数据表的规范
 
-- 每个工具页面为 **单文件组件** (所有子组件、hooks、工具函数都在同一文件)
-- 命名: 组件 PascalCase, 函数/变量 camelCase, 常量 UPPER_SNAKE_CASE
-- CSS: 纯 Tailwind 原子类，不写自定义 CSS 类 (除 globals.css 中的变量)
-- 所有页面均有返回首页的 `<ArrowLeft>` 导航按钮
+每个游戏有独立的 Supabase 表，按游戏形态设计字段：
+- 表名格式：`<game>_records`（如 `literacy_records`, `math_records`）
+- 必须包含 `user_id UUID REFERENCES auth.users(id)` 字段
+- 必须启用 RLS，策略：用户只能访问自己的数据
+- 排行榜数据统一写入 `game_stats` 表，用 `game_id` 区分
 
-### 8.3 Next.js 16 注意事项
+### 8.3 编码风格
 
-- **默认使用 Turbopack** (无自定义 webpack 配置)
-- **App Router only** (无 Pages Router)
-- 异步 Request API: `cookies()`, `headers()`, `params`, `searchParams` 需要 await
-- `middleware` 已更名为 `proxy`
-- ESLint 使用 Flat Config 格式
+- 每个工具页面为单文件组件（子组件、hooks、工具函数都在同一文件）
+- 共享基础设施放 `src/lib/`
+- CSS: 纯 Tailwind 原子类
+- 所有游戏页面用 `RequireAuth` 包裹
+
+### 8.4 Next.js 16 注意事项
+
+- **Turbopack** 默认构建器
+- **App Router only**
+- `useSearchParams()` 必须在 `<Suspense>` 内使用
 - 编码前建议阅读: `node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md`
 
-### 8.4 已知的技术债/改进空间
+### 8.5 已知的技术债/改进空间
 
-- `chinese-literacy/page.tsx` 有 1772 行，可考虑拆分为多个组件文件
-- 绘本馆目前只有 1 本书，书架功能预留了扩展接口
+- `chinese-literacy/page.tsx` 有 2133 行，可考虑拆分
+- 绘本馆只有 1 本书
+- `game_stats` 排行榜表已建好但功能未实现（Phase 3）
 - 无单元测试 / E2E 测试
 - 无 CI/CD 配置
-- 无暗色模式 (CSS 变量已预留但页面未适配)
 
 ---
 
 ## 9. Git 提交历史摘要 (近期)
 
 ```
+255e086 docs: 添加项目框架文档 PROJECT_GUIDE.md
 0f79897 feat: 优化出题范围选择，快捷按钮+单击微调
 66ac75d feat: 测验结果页显示出题范围和测验内容总结
 4410ea0 feat: 新增听音选字九宫格游戏模式
 f708637 feat: 统一抽象字语音为预录音频，翻页停止播放
 8376c5d feat: spaced repetition quiz + abstract char explanations
 05e0db3 feat: picture book reader with audio narration, word highlighting, vocab popups
-c7ad083 feat: 全量预录音频 + Azure Speech多音字精准发音
-753f0bb feat: 500字25期 + 多音字预录音频 + UI优化
-a022884 feat: Chinese literacy learning tool (Phase 1)
-d2cf9bc feat: Portal homepage + move mind map to /property-law route
-9a055ac feat: complete interactive property law mind map
 ```
 
-提交风格: `feat:` / `fix:` / `chore:` 前缀，中英文混合描述。
+提交风格: `feat:` / `fix:` / `chore:` / `docs:` 前缀。
 
 ---
 
@@ -359,15 +356,31 @@ d2cf9bc feat: Portal homepage + move mind map to /property-law route
 | 需求 | 找哪个文件 |
 |------|-----------|
 | 添加新工具到首页 | `src/data/tools.ts` |
-| 修改首页布局 | `src/app/page.tsx` |
+| 修改首页布局/头像 | `src/app/page.tsx` |
+| 修改登录页 | `src/app/login/page.tsx` |
+| 修改认证逻辑 | `src/lib/auth-context.tsx` |
+| 修改登录守卫 | `src/lib/require-auth.tsx` |
+| 修改数据迁移 | `src/lib/migrate-local-data.ts` |
+| Supabase 客户端配置 | `src/lib/supabase.ts` + `.env.local` |
 | 修改全局样式/字体 | `src/app/globals.css` + `src/app/layout.tsx` |
 | 添加/修改汉字数据 | `src/data/characters.ts` |
-| 修改识字学习逻辑 | `src/app/chinese-literacy/page.tsx` |
+| 修改识字学习/测验逻辑 | `src/app/chinese-literacy/page.tsx` |
+| 修改智能出题算法 | 同上，搜索 `generateQuiz` 函数 |
+| 修改遗忘曲线算法 | 同上，搜索 `recordAnswerLocal` 和 `EBBINGHAUS_INTERVALS` |
+| 修改易错字表 | 同上，搜索 `WrongList` 组件 |
 | 修改绘本功能 | `src/app/picture-books/page.tsx` |
-| 添加新绘本 | `public/books/<book-id>/` + 修改 BOOKS 数组 |
-| 修改地产权数据 | `src/data/property-law.ts` |
 | 修改思维导图 | `src/app/property-law/page.tsx` |
-| 生成汉字音频 | `scripts/gen_audio.py` |
-| 生成绘本音频 | `scripts/gen_book_audio.py` |
+| 新增游戏数据表 | Supabase SQL Editor，参考 `literacy_records` 表结构 |
+| 排行榜功能（待开发） | `game_stats` 表已建好，需实现前端 |
 | Next.js 配置 | `next.config.mjs` |
-| 查 Next.js 16 新特性 | `node_modules/next/dist/docs/` |
+
+---
+
+## 11. 未来规划
+
+| 阶段 | 功能 | 状态 |
+|------|------|------|
+| Phase 1 | 用户系统 (Supabase Auth + DB) | ✅ 已完成 |
+| Phase 2 | 智能出题 + 遗忘曲线 + 易错字表 | ✅ 已完成 |
+| Phase 3 | 排行榜 (打卡天数/掌握数量/正确率，周榜/月榜/总榜) | 📋 待开发，`game_stats` 表已预留 |
+| Phase 4+ | 数学游戏、阅读游戏等新模块 | 📋 规划中 |

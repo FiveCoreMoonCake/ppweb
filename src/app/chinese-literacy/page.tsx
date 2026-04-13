@@ -4,6 +4,9 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Volume2, ChevronLeft, ChevronRight, ArrowLeft, RotateCcw, Check, X as XIcon } from "lucide-react";
 import { charGroups, allChars, type CharItem, type CharGroup } from "@/data/characters";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
+import { RequireAuth } from "@/lib/require-auth";
 
 /* ─── helpers ─── */
 
@@ -223,20 +226,28 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-const PROGRESS_KEY = "chinese-literacy-progress";
+/* ── Supabase-backed progress persistence ── */
 
-function loadProgress(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = localStorage.getItem(PROGRESS_KEY);
-    return raw ? new Set(JSON.parse(raw)) : new Set();
-  } catch {
+async function loadProgressFromDB(userId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("literacy_progress")
+    .select("char")
+    .eq("user_id", userId);
+  if (error) {
+    console.error("[loadProgress]", error.message);
     return new Set();
   }
+  return new Set((data ?? []).map((row: { char: string }) => row.char));
 }
 
-function saveProgress(set: Set<string>) {
-  localStorage.setItem(PROGRESS_KEY, JSON.stringify([...set]));
+async function saveProgressChar(userId: string, char: string): Promise<void> {
+  const { error } = await supabase
+    .from("literacy_progress")
+    .upsert(
+      { user_id: userId, char, learned_at: new Date().toISOString() },
+      { onConflict: "user_id,char" },
+    );
+  if (error) console.error("[saveProgressChar]", error.message);
 }
 
 /* ─── Minecraft-style emoji block ─── */
@@ -318,13 +329,15 @@ function CharCard({ item, compact = false }: { item: CharItem; compact?: boolean
 
 /* ─── Learn Mode ─── */
 
-function LearnMode({ onBack }: { onBack: () => void }) {
+function LearnMode({ onBack, userId }: { onBack: () => void; userId: string }) {
   const [groupIdx, setGroupIdx] = useState(0);
   const [cardIdx, setCardIdx] = useState(0);
   const [learned, setLearned] = useState<Set<string>>(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  useEffect(() => setLearned(loadProgress()), []);
+  useEffect(() => {
+    loadProgressFromDB(userId).then(setLearned);
+  }, [userId]);
 
   const group = charGroups[groupIdx];
   const card = group.chars[cardIdx];
@@ -336,10 +349,10 @@ function LearnMode({ onBack }: { onBack: () => void }) {
       if (prev.has(card.char)) return prev;
       const next = new Set(prev);
       next.add(card.char);
-      saveProgress(next);
+      saveProgressChar(userId, card.char);
       return next;
     });
-  }, [card]);
+  }, [card, userId]);
 
   const prev = () => { stopAll(); setCardIdx((i) => Math.max(0, i - 1)); };
   const next = () => {
@@ -511,29 +524,7 @@ function LearnMode({ onBack }: { onBack: () => void }) {
   );
 }
 
-/* ─── Learning Records (spaced repetition) ─── */
-
-interface CharRecord {
-  right: number;
-  wrong: number;
-  lastSeen: string;     // ISO date string
-  nextReview: string;   // ISO date string
-  interval: number;     // days
-}
-
-const RECORDS_KEY = "chinese-literacy-records";
-
-function loadRecords(): Record<string, CharRecord> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(RECORDS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
-}
-
-function saveRecords(records: Record<string, CharRecord>) {
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
-}
+/* ── Date helpers ── */
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
@@ -545,24 +536,108 @@ function addDays(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function recordAnswer(char: string, correct: boolean): Record<string, CharRecord> {
-  const records = loadRecords();
+/* ── Supabase-backed learning records (spaced repetition) ── */
+
+interface CharRecord {
+  right: number;
+  wrong: number;
+  lastSeen: string;     // ISO date string
+  nextReview: string;   // ISO date string
+  interval: number;     // days
+}
+
+async function loadRecordsFromDB(userId: string): Promise<Record<string, CharRecord>> {
+  const { data, error } = await supabase
+    .from("literacy_records")
+    .select("char, right_count, wrong_count, level, last_seen, next_review")
+    .eq("user_id", userId);
+  if (error) {
+    console.error("[loadRecords]", error.message);
+    return {};
+  }
+  const out: Record<string, CharRecord> = {};
+  for (const row of data ?? []) {
+    out[row.char] = {
+      right: row.right_count ?? 0,
+      wrong: row.wrong_count ?? 0,
+      lastSeen: (row.last_seen ?? todayStr()).slice(0, 10),
+      nextReview: (row.next_review ?? todayStr()).slice(0, 10),
+      interval: row.level ?? 1,
+    };
+  }
+  return out;
+}
+
+async function upsertRecord(userId: string, char: string, rec: CharRecord): Promise<void> {
+  const { error } = await supabase
+    .from("literacy_records")
+    .upsert(
+      {
+        user_id: userId,
+        char,
+        right_count: rec.right,
+        wrong_count: rec.wrong,
+        level: rec.interval,
+        last_seen: rec.lastSeen,
+        next_review: rec.nextReview,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,char" },
+    );
+  if (error) console.error("[upsertRecord]", error.message);
+}
+
+async function upsertRecordWithMastered(userId: string, char: string, rec: CharRecord, mastered: boolean): Promise<void> {
+  const { error } = await supabase
+    .from("literacy_records")
+    .upsert({
+      user_id: userId,
+      char,
+      right_count: rec.right,
+      wrong_count: rec.wrong,
+      level: rec.interval,
+      last_seen: rec.lastSeen,
+      next_review: rec.nextReview,
+      mastered,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,char" });
+  if (error) console.error("[upsertRecord]", error.message);
+}
+
+const EBBINGHAUS_INTERVALS = [1, 2, 4, 7, 15, 30]; // days
+
+/**
+ * Record an answer for a character using Ebbinghaus forgetting curve.
+ * `interval` field represents the level (0-5 index into EBBINGHAUS_INTERVALS).
+ * Mutates `records` in-place, persists to Supabase, and returns the updated map.
+ */
+function recordAnswerLocal(
+  records: Record<string, CharRecord>,
+  char: string,
+  correct: boolean,
+  userId: string,
+): Record<string, CharRecord> {
   const today = todayStr();
-  const prev = records[char] || { right: 0, wrong: 0, lastSeen: today, nextReview: today, interval: 1 };
+  const prev = records[char] || { right: 0, wrong: 0, lastSeen: today, nextReview: today, interval: 0 };
+  // Note: `interval` field now represents `level` (0-5 index into EBBINGHAUS_INTERVALS)
 
   if (correct) {
     prev.right++;
-    prev.interval = Math.min(prev.interval * 2, 64); // cap at 64 days
-    prev.nextReview = addDays(today, prev.interval);
+    prev.interval = Math.min(prev.interval + 1, EBBINGHAUS_INTERVALS.length - 1);
+    prev.nextReview = addDays(today, EBBINGHAUS_INTERVALS[prev.interval]);
   } else {
     prev.wrong++;
-    prev.interval = 1;
+    prev.interval = 0; // reset to level 0
     prev.nextReview = addDays(today, 1);
   }
   prev.lastSeen = today;
   records[char] = prev;
-  saveRecords(records);
-  return records;
+
+  // Fire-and-forget persistence — also set mastered flag
+  const mastered = correct && prev.interval >= EBBINGHAUS_INTERVALS.length - 1;
+  upsertRecordWithMastered(userId, char, prev, mastered);
+
+  return { ...records };
 }
 
 /* ─── Sound Effects ─── */
@@ -622,9 +697,8 @@ interface PoolEntry {
   readingIdx: number;
 }
 
-function generateQuiz(groupIds: string[], count: number): QuizQuestion[] {
+function generateQuiz(groupIds: string[], count: number, records: Record<string, CharRecord>): QuizQuestion[] {
   const chars = allChars.filter((c) => groupIds.includes(c.groupId));
-  const records = loadRecords();
   const today = todayStr();
 
   // Expand: each reading of each char is a separate pool entry
@@ -632,41 +706,79 @@ function generateQuiz(groupIds: string[], count: number): QuizQuestion[] {
     item.readings.map((_, ri) => ({ item, readingIdx: ri }))
   );
 
-  // Categorize entries
-  const dueForReview: PoolEntry[] = [];   // nextReview <= today
-  const highError: PoolEntry[] = [];      // wrong >= 3 and not already due
-  const newChars: PoolEntry[] = [];       // never seen
+  // Categorize entries with proportional allocation:
+  //   1. Easy-wrong (~40%): accuracy < 50% AND total attempts >= 3
+  //   2. Due for review (~30%): nextReview <= today (excluding easy-wrong)
+  //   3. New chars (~20%): never answered
+  //   4. Random fill (~10%): everything else
+  const easyWrong: PoolEntry[] = [];
+  const dueForReview: PoolEntry[] = [];
+  const newChars: PoolEntry[] = [];
   const rest: PoolEntry[] = [];
 
   for (const entry of pool) {
     const rec = records[entry.item.char];
     if (!rec) {
       newChars.push(entry);
-    } else if (rec.nextReview <= today) {
-      dueForReview.push(entry);
-    } else if (rec.wrong >= 3) {
-      highError.push(entry);
     } else {
-      rest.push(entry);
+      const total = rec.right + rec.wrong;
+      const accuracy = total > 0 ? rec.right / total : 1;
+      const isEasyWrong = accuracy < 0.5 && total >= 3;
+      const isDue = rec.nextReview <= today;
+      // Mastered chars (level 5) should NOT appear unless they're due or easy-wrong
+      const isMastered = rec.interval >= EBBINGHAUS_INTERVALS.length - 1;
+
+      if (isEasyWrong) {
+        easyWrong.push(entry); // highest priority bucket
+      } else if (isDue) {
+        dueForReview.push(entry);
+      } else if (isMastered) {
+        // Mastered and not due and not easy-wrong: skip entirely
+        continue;
+      } else {
+        rest.push(entry);
+      }
     }
   }
 
-  // Priority: due > high-error > new > rest
-  const prioritized = [
-    ...shuffle(dueForReview),
-    ...shuffle(highError),
-    ...shuffle(newChars),
-    ...shuffle(rest),
+  // Proportional allocation with overflow
+  const targets = [
+    { bucket: shuffle(easyWrong),    pct: 0.4 },
+    { bucket: shuffle(dueForReview), pct: 0.3 },
+    { bucket: shuffle(newChars),     pct: 0.2 },
+    { bucket: shuffle(rest),         pct: 0.1 },
   ];
 
-  // Deduplicate by char (avoid testing same char twice)
   const seen = new Set<string>();
   const picked: PoolEntry[] = [];
-  for (const entry of prioritized) {
-    if (seen.has(entry.item.char)) continue;
-    seen.add(entry.item.char);
-    picked.push(entry);
-    if (picked.length >= count) break;
+
+  // First pass: fill each bucket up to its allocation
+  let remaining = count;
+  for (const { bucket, pct } of targets) {
+    const alloc = Math.round(count * pct);
+    let filled = 0;
+    for (const entry of bucket) {
+      if (filled >= alloc || remaining <= 0) break;
+      if (seen.has(entry.item.char)) continue;
+      seen.add(entry.item.char);
+      picked.push(entry);
+      filled++;
+      remaining--;
+    }
+  }
+
+  // Second pass: overflow — fill remaining slots from any bucket in priority order
+  if (remaining > 0) {
+    for (const { bucket } of targets) {
+      for (const entry of bucket) {
+        if (remaining <= 0) break;
+        if (seen.has(entry.item.char)) continue;
+        seen.add(entry.item.char);
+        picked.push(entry);
+        remaining--;
+      }
+      if (remaining <= 0) break;
+    }
   }
 
   const questions = picked.map((entry) => {
@@ -834,10 +946,16 @@ function QuizPlay({
   questions,
   onFinish,
   onBack,
+  records,
+  userId,
+  onRecordsChange,
 }: {
   questions: QuizQuestion[];
   onFinish: (answers: QuizAnswer[]) => void;
   onBack: () => void;
+  records: Record<string, CharRecord>;
+  userId: string;
+  onRecordsChange: (r: Record<string, CharRecord>) => void;
 }) {
   const [qIdx, setQIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -883,8 +1001,8 @@ function QuizPlay({
     const answer: QuizAnswer = { question: q, selected: char, isCorrect: correct };
     setAnswers((prev) => [...prev, answer]);
 
-    // Record to localStorage for spaced repetition
-    recordAnswer(q.correct.char, correct);
+    // Record to Supabase for spaced repetition
+    onRecordsChange(recordAnswerLocal(records, q.correct.char, correct, userId));
 
     if (correct) {
       playCorrectSound();
@@ -1302,10 +1420,16 @@ function ListenQuizPlay({
   groupIds,
   onFinish,
   onBack,
+  records,
+  userId,
+  onRecordsChange,
 }: {
   groupIds: string[];
   onFinish: (result: ListenQuizResult, grid: CharItem[]) => void;
   onBack: () => void;
+  records: Record<string, CharRecord>;
+  userId: string;
+  onRecordsChange: (r: Record<string, CharRecord>) => void;
 }) {
   const [grid, setGrid] = useState<CharItem[]>([]);
   const [queue, setQueue] = useState<number[]>([]);     // indices into grid, shuffled order
@@ -1370,7 +1494,7 @@ function ListenQuizPlay({
       setCurrentWrongTaps([]);
 
       // Record to spaced repetition
-      recordAnswer(targetChar.char, currentWrongTaps.length === 0);
+      onRecordsChange(recordAnswerLocal(records, targetChar.char, currentWrongTaps.length === 0, userId));
 
       // Move to next or finish
       if (newSolved.size === grid.length) {
@@ -1389,7 +1513,7 @@ function ListenQuizPlay({
       playWrongSound();
       setCurrentWrongTaps((prev) => [...prev, grid[gridIdx].char]);
       // Record wrong tap for the tapped char too
-      recordAnswer(grid[gridIdx].char, false);
+      onRecordsChange(recordAnswerLocal(records, grid[gridIdx].char, false, userId));
       // Shake animation
       setShaking(gridIdx);
       setTimeout(() => setShaking(null), 500);
@@ -1639,13 +1763,191 @@ function ListenQuizResults({
   );
 }
 
+/* ─── Easy-Wrong Characters (易错字表) ─── */
+
+interface WrongCharEntry {
+  char: string;
+  right: number;
+  wrong: number;
+  accuracy: number;
+}
+
+function getWrongChars(records: Record<string, CharRecord>): WrongCharEntry[] {
+  return Object.entries(records)
+    .filter(([_, rec]) => {
+      const total = rec.right + rec.wrong;
+      return total >= 3 && rec.right / total < 0.5;
+    })
+    .map(([char, rec]) => ({
+      char,
+      right: rec.right,
+      wrong: rec.wrong,
+      accuracy: rec.right / (rec.right + rec.wrong),
+    }))
+    .sort((a, b) => a.accuracy - b.accuracy);
+}
+
+function WrongList({
+  records,
+  onBack,
+  onStartPractice,
+}: {
+  records: Record<string, CharRecord>;
+  onBack: () => void;
+  onStartPractice: (chars: CharItem[]) => void;
+}) {
+  const wrongChars = getWrongChars(records);
+
+  const handlePlaySound = (char: string) => {
+    const item = allChars.find((c) => c.char === char);
+    if (item) speakChar(item);
+  };
+
+  const handleStartPractice = () => {
+    const wrongCharItems = wrongChars
+      .map((wc) => allChars.find((c) => c.char === wc.char))
+      .filter((item): item is CharItem => item !== undefined);
+    if (wrongCharItems.length >= 4) {
+      onStartPractice(wrongCharItems);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-dvh">
+      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 shrink-0">
+        <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <h1 className="font-bold text-slate-800 text-lg">易错字表</h1>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 sm:py-10 max-w-xl mx-auto w-full">
+        <p className="text-sm text-slate-500 mb-6">
+          正确率低于 50% 且答题次数 ≥ 3 的字
+        </p>
+
+        {wrongChars.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center py-20 gap-4"
+          >
+            <span className="text-6xl">🎉</span>
+            <p className="text-lg font-bold text-slate-700">暂无易错字，继续加油！</p>
+            <p className="text-sm text-slate-400">所有字的正确率都在 50% 以上，或答题次数不足 3 次</p>
+          </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex flex-col gap-3"
+          >
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {wrongChars.map((wc) => {
+                const item = allChars.find((c) => c.char === wc.char);
+                const accuracyPct = Math.round(wc.accuracy * 100);
+                const total = wc.right + wc.wrong;
+                const colorClass =
+                  accuracyPct < 30
+                    ? "border-rose-300 bg-rose-50"
+                    : "border-orange-300 bg-orange-50";
+                const textColor =
+                  accuracyPct < 30 ? "text-rose-600" : "text-orange-600";
+                const barColor =
+                  accuracyPct < 30 ? "bg-rose-400" : "bg-orange-400";
+
+                return (
+                  <motion.div
+                    key={wc.char}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className={`rounded-xl border-2 ${colorClass} shadow-sm p-4 flex flex-col items-center gap-2`}
+                  >
+                    <span className="text-4xl font-bold text-slate-800">
+                      {wc.char}
+                    </span>
+
+                    {/* Pinyin */}
+                    {item && (
+                      <div className="flex flex-wrap justify-center gap-1 text-xs text-slate-500 font-mono">
+                        {item.readings.map((r, i) => (
+                          <span key={i}>{r.pinyin}</span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Accuracy bar */}
+                    <div className="w-full">
+                      <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${barColor} rounded-full transition-all`}
+                          style={{ width: `${accuracyPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className={`font-bold ${textColor}`}>
+                        {accuracyPct}%
+                      </span>
+                      <span className="text-slate-400">
+                        {wc.wrong}错 / {total}次
+                      </span>
+                    </div>
+
+                    {/* Play button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePlaySound(wc.char);
+                      }}
+                      className="mt-1 p-2 rounded-full bg-white border border-slate-200 shadow-sm hover:bg-slate-50 active:scale-95 transition-all"
+                      title="播放读音"
+                    >
+                      <Volume2 className="w-4 h-4 text-indigo-500" />
+                    </button>
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            {/* Start targeted practice */}
+            {wrongChars.length >= 4 && (
+              <button
+                onClick={handleStartPractice}
+                className="mt-6 w-full py-4 rounded-2xl bg-rose-500 text-white font-bold text-lg hover:bg-rose-600 active:scale-[0.98] transition-all"
+              >
+                开始专项练习 🎯
+              </button>
+            )}
+            {wrongChars.length > 0 && wrongChars.length < 4 && (
+              <p className="mt-4 text-xs text-slate-400 text-center">
+                易错字不足 4 个，无法生成专项练习（需至少 4 个字出题）
+              </p>
+            )}
+          </motion.div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Page ─── */
 
-type Mode = "home" | "learn" | "quiz-settings" | "quiz-play" | "quiz-results" | "listen-quiz-settings" | "listen-quiz-play" | "listen-quiz-results";
+type Mode = "home" | "learn" | "quiz-settings" | "quiz-play" | "quiz-results" | "listen-quiz-settings" | "listen-quiz-play" | "listen-quiz-results" | "wrongList";
 
-export default function ChineseLiteracyPage() {
+function ChineseLiteracyInner() {
+  const { user } = useAuth();
+  const userId = user!.id; // RequireAuth guarantees user is non-null
+
   const [mode, setMode] = useState<Mode>("home");
   const [isClient, setIsClient] = useState(false);
+
+  // Supabase-backed state
+  const [progress, setProgress] = useState<Set<string>>(new Set());
+  const [records, setRecords] = useState<Record<string, CharRecord>>({});
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   // Quiz state
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
@@ -1662,14 +1964,31 @@ export default function ChineseLiteracyPage() {
   useEffect(() => setIsClient(true), []);
   useVoiceInit();
 
+  // Load data from Supabase on mount
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const [prog, recs] = await Promise.all([
+        loadProgressFromDB(userId),
+        loadRecordsFromDB(userId),
+      ]);
+      if (cancelled) return;
+      setProgress(prog);
+      setRecords(recs);
+      setDataLoaded(true);
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [userId]);
+
   const startQuiz = useCallback((groupIds: string[], count: number) => {
-    const questions = generateQuiz(groupIds, count);
+    const questions = generateQuiz(groupIds, count, records);
     setQuizQuestions(questions);
     setQuizAnswers([]);
     setQuizRound((r) => r + 1);
     setLastQuizConfig({ groupIds, count });
     setMode("quiz-play");
-  }, []);
+  }, [records]);
 
   const retryQuiz = useCallback(() => {
     if (lastQuizConfig) startQuiz(lastQuizConfig.groupIds, lastQuizConfig.count);
@@ -1686,11 +2005,11 @@ export default function ChineseLiteracyPage() {
     if (listenGroupIds.length > 0) startListenQuiz(listenGroupIds);
   }, [listenGroupIds, startListenQuiz]);
 
-  if (!isClient) {
+  if (!isClient || !dataLoaded) {
     return <div className="h-screen bg-slate-50 flex items-center justify-center text-slate-400">加载中...</div>;
   }
 
-  if (mode === "learn") return <LearnMode onBack={() => setMode("home")} />;
+  if (mode === "learn") return <LearnMode onBack={() => setMode("home")} userId={userId} />;
   if (mode === "quiz-settings") return <QuizSettings onStart={startQuiz} onBack={() => setMode("home")} />;
   if (mode === "listen-quiz-settings") return <ListenQuizSettings onStart={startListenQuiz} onBack={() => setMode("home")} />;
   if (mode === "quiz-play")
@@ -1699,6 +2018,9 @@ export default function ChineseLiteracyPage() {
         questions={quizQuestions}
         onFinish={(a) => { setQuizAnswers(a); setMode("quiz-results"); }}
         onBack={() => setMode("home")}
+        records={records}
+        userId={userId}
+        onRecordsChange={setRecords}
       />
     );
   if (mode === "quiz-results")
@@ -1710,13 +2032,36 @@ export default function ChineseLiteracyPage() {
         groupIds={listenGroupIds}
         onFinish={(r, g) => { setListenResult(r); setListenGrid(g); setMode("listen-quiz-results"); }}
         onBack={() => setMode("home")}
+        records={records}
+        userId={userId}
+        onRecordsChange={setRecords}
       />
     );
   if (mode === "listen-quiz-results" && listenResult)
     return <ListenQuizResults key={listenRound} result={listenResult} grid={listenGrid} groupIds={listenGroupIds} onRetry={retryListenQuiz} onBack={() => setMode("home")} />;
+  if (mode === "wrongList")
+    return (
+      <WrongList
+        records={records}
+        onBack={() => setMode("home")}
+        onStartPractice={(wrongItems) => {
+          // Build quiz questions directly from the wrong-char items
+          const groupIds = [...new Set(wrongItems.map((c) => c.groupId))];
+          const questions = generateQuiz(groupIds, Math.min(wrongItems.length, 20), records);
+          // Filter to only include questions for the wrong chars
+          const wrongCharSet = new Set(wrongItems.map((c) => c.char));
+          const filtered = questions.filter((q) => wrongCharSet.has(q.correct.char));
+          const finalQuestions = filtered.length >= 4 ? filtered : questions.slice(0, Math.min(wrongItems.length, 20));
+          setQuizQuestions(finalQuestions);
+          setQuizAnswers([]);
+          setQuizRound((r) => r + 1);
+          setLastQuizConfig({ groupIds, count: finalQuestions.length });
+          setMode("quiz-play");
+        }}
+      />
+    );
 
   // Home
-  const progress = isClient ? loadProgress() : new Set<string>();
   const progressPct = Math.round((progress.size / allChars.length) * 100);
 
   return (
@@ -1762,11 +2107,27 @@ export default function ChineseLiteracyPage() {
           <span className="font-bold text-lg text-amber-700">听音选字</span>
           <span className="block text-xs text-slate-400 mt-1">九宫格，听音点字</span>
         </button>
+        <button
+          onClick={() => setMode("wrongList")}
+          className="flex-1 py-5 rounded-2xl bg-white border-2 border-rose-200 shadow-sm hover:shadow-md hover:border-rose-400 active:scale-[0.97] transition-all text-center"
+        >
+          <span className="text-3xl block mb-2">📋</span>
+          <span className="font-bold text-lg text-rose-700">易错字表</span>
+          <span className="block text-xs text-slate-400 mt-1">专项复习易错字</span>
+        </button>
       </div>
 
       <a href="/" className="mt-10 text-sm text-slate-400 hover:text-slate-600 transition-colors">
         ← 返回工具箱
       </a>
     </div>
+  );
+}
+
+export default function ChineseLiteracyPage() {
+  return (
+    <RequireAuth>
+      <ChineseLiteracyInner />
+    </RequireAuth>
   );
 }

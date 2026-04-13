@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { tools, categoryLabels, type Tool } from "@/data/tools";
+import { useAuth } from "@/lib/auth-context";
 
 const categoryOrder: Tool["category"][] = ["law", "kids", "other"];
 
 export default function PortalHome() {
+  const { user, loading, signOut } = useAuth();
+
   // Group tools by category, only show categories that have tools
   const grouped = categoryOrder
     .map((cat) => ({
@@ -28,6 +31,40 @@ export default function PortalHome() {
               用 Vibe Coding 快速搭建的交互式学习工具合集
             </p>
           </div>
+
+          {/* Auth UI */}
+          {!loading && (
+            <div className="flex items-center gap-3">
+              {user ? (
+                <>
+                  {(user.user_metadata?.avatar_url || user.user_metadata?.picture) ? (
+                    <img
+                      src={user.user_metadata.avatar_url ?? user.user_metadata.picture}
+                      alt="avatar"
+                      className="w-8 h-8 rounded-full object-cover ring-2 ring-slate-200"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 ring-2 ring-slate-200 flex items-center justify-center text-sm font-bold">
+                      {(user.email?.[0] ?? "U").toUpperCase()}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => signOut()}
+                    className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    退出
+                  </button>
+                </>
+              ) : (
+                <Link
+                  href="/login"
+                  className="text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+                >
+                  登录
+                </Link>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
