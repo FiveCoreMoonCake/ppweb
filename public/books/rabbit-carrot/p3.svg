@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fde68a"/>
+      <stop offset="100%" style="stop-color:#fdba74"/>
+    </linearGradient>
+  </defs>
+  <rect fill="url(#bg)" width="800" height="600" rx="16"/>
+  <rect x="280" y="120" width="240" height="280" rx="12" fill="#e2e8f0" stroke="#94a3b8" stroke-width="3"/>
+  <text x="400" y="200" text-anchor="middle" font-size="40">❄️</text>
+  <text x="400" y="290" text-anchor="middle" fill="#94a3b8" font-size="28" font-family="sans-serif">空空的</text>
+  <text x="400" y="340" text-anchor="middle" fill="#94a3b8" font-size="24" font-family="sans-serif">冰箱</text>
+  <text x="180" y="350" font-size="90">🐰</text>
+  <text x="400" y="500" text-anchor="middle" font-size="50">💭🥕</text>
+  <text x="400" y="560" text-anchor="middle" fill="#7c4a1a" font-size="20" font-family="sans-serif">肚子好饿 · 萝卜都吃完了</text>
+</svg>

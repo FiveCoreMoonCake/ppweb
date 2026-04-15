@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fef3c7"/>
+      <stop offset="100%" style="stop-color:#fde68a"/>
+    </linearGradient>
+  </defs>
+  <rect fill="url(#bg)" width="800" height="600" rx="16"/>
+  <text x="150" y="250" font-size="50">⛰️</text>
+  <text x="350" y="200" font-size="40">🌸</text>
+  <text x="500" y="220" font-size="35">🌼</text>
+  <text x="650" y="240" font-size="45">🌷</text>
+  <text x="400" y="380" font-size="80">🐰</text>
+  <text x="550" y="350" font-size="30">🦋</text>
+  <path d="M100,450 Q200,420 300,450 Q400,480 500,440 Q600,410 700,450" fill="none" stroke="#a3a352" stroke-width="3" stroke-dasharray="8,4"/>
+  <text x="400" y="560" text-anchor="middle" fill="#6b5a1a" font-size="20" font-family="sans-serif">翻过山坡 · 穿过花田 · 坚持往前走</text>
+</svg>

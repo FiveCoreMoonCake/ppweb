@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fed7aa"/>
+      <stop offset="100%" style="stop-color:#fecaca"/>
+    </linearGradient>
+  </defs>
+  <rect fill="url(#bg)" width="800" height="600" rx="16"/>
+  <rect x="100" y="350" width="600" height="150" rx="8" fill="#8B6914" opacity="0.3"/>
+  <text x="180" y="360" font-size="50">🥕</text>
+  <text x="300" y="340" font-size="55">🥕</text>
+  <text x="420" y="350" font-size="45">🥕</text>
+  <text x="540" y="340" font-size="55">🥕</text>
+  <text x="650" y="360" font-size="45">🥕</text>
+  <text x="240" y="380" font-size="35">🥕</text>
+  <text x="480" y="375" font-size="40">🥕</text>
+  <text x="400" y="200" font-size="100">🐰</text>
+  <text x="400" y="170" font-size="40">🎉</text>
+  <text x="400" y="560" text-anchor="middle" fill="#7c3a1a" font-size="20" font-family="sans-serif">好大的菜园 · 满地的萝卜 · 开心极了</text>
+</svg>

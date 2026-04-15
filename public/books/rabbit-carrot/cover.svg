@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1067" viewBox="0 0 800 1067">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#86efac"/>
+      <stop offset="100%" style="stop-color:#34d399"/>
+    </linearGradient>
+  </defs>
+  <rect fill="url(#bg)" width="800" height="1067" rx="24"/>
+  <text x="400" y="300" text-anchor="middle" font-size="160" font-family="serif">🐰🥕</text>
+  <text x="400" y="520" text-anchor="middle" fill="#1e3a2f" font-size="72" font-family="serif" font-weight="bold">小白兔</text>
+  <text x="400" y="620" text-anchor="middle" fill="#1e3a2f" font-size="72" font-family="serif" font-weight="bold">找萝卜</text>
+  <text x="400" y="720" text-anchor="middle" fill="#2d5a47" font-size="28" font-family="sans-serif">一个关于坚持和分享的故事</text>
+  <text x="400" y="800" text-anchor="middle" fill="#3d7a67" font-size="22" font-family="sans-serif">适合 3-6 岁</text>
+</svg>

@@ -282,7 +282,7 @@ level 5 答对 → mastered = true
 - **生词**：阅读中不做内联标记，绘本最后一页统一展示生词汇总表
 - **自动播放**：保留，header 按钮触发，连续朗读全书
 - **控制栏**：已简化，去掉播放/暂停大按钮，只保留翻页 + 页码 + 自动播放
-- RequireAuth 守卫（**当前临时跳过，待测试完成后恢复**）
+- RequireAuth 守卫（**已恢复**）
 - 目前 1 本书：《小白兔找萝卜》，使用 SVG 占位插图
 
 **book.json 数据格式（v2）：**
@@ -310,8 +310,8 @@ PictureBooksInner → BookShelf | BookReader
 ```
 
 **待完成事项：**
-- [ ] 浏览器端视觉验证（代码已写完，服务端确认提供新代码，但浏览器缓存问题待排查）
-- [ ] 恢复 RequireAuth 登录守卫
+- [x] 浏览器端视觉验证 — 静态资源（SVG 插图、book.json、MP3）均正常加载，dev server 验证通过
+- [x] 恢复 RequireAuth 登录守卫
 - [ ] 用真实 AI 插图替换 SVG 占位图
 - [ ] 绘本生产 pipeline 设计（多 agent 协作）
 

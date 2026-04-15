@@ -1,42 +1,35 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { RequireAuth } from "@/lib/require-auth";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
-  Play,
-  Pause,
-  RotateCcw,
   Volume2,
-  X as XIcon,
+  BookOpen,
+  PlayCircle,
+  StopCircle,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 /* ─── Types ─── */
-interface WordBoundary {
-  w: string;
-  s: number;
-  e: number;
-}
+interface WordBoundary { w: string; s: number; e: number }
 
-interface VocabItem {
-  word: string;
-  pinyin: string;
-  meaning: string;
-}
+interface VocabItem { word: string; pinyin: string; meaning: string }
 
 interface BookPage {
-  textPosition?: "top" | "center" | "bottom";
   text: string;
   subtitle?: string;
   image?: string;
+  layout?: "image-top" | "image-full" | "text-only" | "vocab-summary";
   audio: string;
   words: WordBoundary[];
   emoji?: string;
   bg?: string;
+  textPosition?: "top" | "center" | "bottom";
   vocab?: VocabItem[];
 }
 
@@ -45,290 +38,216 @@ interface Book {
   title: string;
   author: string;
   ageRange: string;
+  cover?: string;
   pages: BookPage[];
 }
 
 /* ─── Book list ─── */
 const BOOKS = [
-  { id: "rabbit-carrot", title: "小白兔找萝卜", emoji: "🐰🥕", ageRange: "3-6" },
+  {
+    id: "rabbit-carrot",
+    title: "小白兔找萝卜",
+    emoji: "🐰🥕",
+    ageRange: "3-6",
+    cover: "/books/rabbit-carrot/cover.svg",
+    pageCount: 10,
+  },
 ];
 
-/* ─── Vocab Popup ─── */
-function VocabPopup({
-  vocab,
-  onClose,
-  onMouseEnter,
-  onMouseLeave,
+/* ─── Highlighted text (used during tap-to-read playback) ─── */
+function HighlightedText({
+  words,
+  activeIdx,
+  isPlaying,
+  text,
 }: {
-  vocab: VocabItem;
-  onClose: () => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
+  words: WordBoundary[];
+  activeIdx: number;
+  isPlaying: boolean;
+  text: string;
 }) {
-  const speak = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  if (isPlaying && words.length > 0) {
+    return (
+      <span className="leading-[2] text-base sm:text-lg md:text-xl">
+        {words.map((wb, i) => {
+          const isActive = i === activeIdx;
+          const isPast = i < activeIdx;
+          return (
+            <span
+              key={i}
+              className={`transition-colors duration-150 ${
+                isActive
+                  ? "text-amber-600 bg-amber-100/90 rounded px-0.5 font-bold"
+                  : isPast
+                    ? "text-slate-800"
+                    : "text-slate-400"
+              }`}
+            >
+              {wb.w}
+            </span>
+          );
+        })}
+      </span>
+    );
+  }
+  return <span className="leading-[2] text-base sm:text-lg md:text-xl text-slate-800">{text}</span>;
+}
+
+/* ─── Single page panel (used in both spread and single-page modes) ─── */
+function PagePanel({
+  page,
+  pageIdx,
+  playingPageIdx,
+  activeWordIdx,
+  onTapText,
+}: {
+  page: BookPage;
+  pageIdx: number;
+  playingPageIdx: number | null;
+  activeWordIdx: number;
+  onTapText: (pageIdx: number) => void;
+}) {
+  const isPlaying = playingPageIdx === pageIdx;
+  const hasImage = !!page.image;
+  const pos = page.textPosition || "bottom";
+  const posClass =
+    pos === "top" ? "items-start pt-4" :
+    pos === "center" ? "items-center" :
+    "items-end pb-4";
+
+  return (
+    <div className="relative w-full h-full overflow-hidden">
+      {/* Background image */}
+      {hasImage && (
+        <Image
+          src={page.image!}
+          alt=""
+          fill
+          className="object-cover"
+          sizes="50vw"
+          unoptimized={page.image!.endsWith(".svg")}
+        />
+      )}
+      {/* Fallback: emoji + gradient */}
+      {!hasImage && (
+        <div className={`absolute inset-0 bg-gradient-to-br ${page.bg || "from-slate-100 to-slate-200"}`}>
+          {page.emoji && (
+            <span className="absolute inset-0 flex items-center justify-center text-6xl sm:text-8xl select-none opacity-80 pointer-events-none">
+              {page.emoji}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Text overlay — clickable for tap-to-read */}
+      <div className={`absolute inset-0 flex flex-col ${posClass} justify-end p-3 sm:p-4`}>
+        <div
+          onClick={() => onTapText(pageIdx)}
+          className={`bg-white/80 backdrop-blur-sm rounded-lg px-3 py-2.5 sm:px-4 sm:py-3 max-w-full shadow-sm cursor-pointer transition-all hover:bg-white/90 ${
+            isPlaying ? "ring-2 ring-amber-400 bg-white/90" : ""
+          }`}
+        >
+          <HighlightedText
+            words={page.words}
+            activeIdx={activeWordIdx}
+            isPlaying={isPlaying}
+            text={page.text}
+          />
+          {page.subtitle && (
+            <p className="text-center text-xs sm:text-sm text-slate-400 mt-1.5">{page.subtitle}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Vocab Summary Page ─── */
+function VocabSummaryPanel({ page }: { page: BookPage }) {
+  const speak = (word: string, meaning: string) => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
-      // Read word first, then explanation
-      const u = new SpeechSynthesisUtterance(`${vocab.word}，，${vocab.meaning}`);
+      const u = new SpeechSynthesisUtterance(`${word}，，${meaning}`);
       u.lang = "zh-CN";
       u.rate = 0.7;
       window.speechSynthesis.speak(u);
     }
   };
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9, y: 8 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.9, y: 8 }}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      className="absolute z-30 bg-white rounded-xl shadow-xl border border-amber-200 px-4 py-3 min-w-[180px] -translate-x-1/2 left-1/2 top-full mt-2"
-    >
-      <button onClick={onClose} className="absolute top-1.5 right-1.5 text-slate-400 hover:text-slate-600">
-        <XIcon className="w-3.5 h-3.5" />
-      </button>
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-lg font-bold text-amber-700">{vocab.word}</span>
-        <span className="text-xs text-slate-400 font-mono">{vocab.pinyin}</span>
-        <button onClick={speak} className="p-1 rounded-full bg-amber-100 text-amber-600 hover:bg-amber-200">
-          <Volume2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-      <p className="text-sm text-slate-600">{vocab.meaning}</p>
-    </motion.div>
-  );
-}
-
-/* ─── Rich Text with highlighting and vocab ─── */
-function RichText({
-  text,
-  words,
-  activeIdx,
-  isPlaying,
-  vocab,
-}: {
-  text: string;
-  words: WordBoundary[];
-  activeIdx: number;
-  isPlaying: boolean;
-  vocab?: VocabItem[];
-}) {
-  const [activeVocab, setActiveVocab] = useState<VocabItem | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Build vocab lookup set
-  const vocabMap = new Map<string, VocabItem>();
-  vocab?.forEach((v) => vocabMap.set(v.word, v));
-
-  const showPopup = (v: VocabItem) => {
-    if (hoverTimeoutRef.current) { clearTimeout(hoverTimeoutRef.current); hoverTimeoutRef.current = null; }
-    setActiveVocab(v);
-  };
-  const scheduleClose = () => {
-    hoverTimeoutRef.current = setTimeout(() => setActiveVocab(null), 300);
-  };
-  const cancelClose = () => {
-    if (hoverTimeoutRef.current) { clearTimeout(hoverTimeoutRef.current); hoverTimeoutRef.current = null; }
-  };
-
-  const handleVocabClick = (v: VocabItem, e: React.MouseEvent) => {
-    e.stopPropagation();
-    showPopup(v);
-  };
-
-  // If playing and have word boundaries, show highlighted text
-  if (isPlaying && words.length > 0) {
-    return (
-      <div ref={containerRef} className="relative" onClick={() => setActiveVocab(null)}>
-        <span className="leading-[2] text-lg sm:text-xl">
-          {words.map((wb, i) => {
-            const matchedVocab = vocabMap.get(wb.w.replace(/[，。！？、""]/g, ""));
-            const isActive = i === activeIdx;
-            const isPast = i < activeIdx;
-            return (
-              <span
-                key={i}
-                onClick={matchedVocab ? (e) => handleVocabClick(matchedVocab, e) : undefined}
-                onMouseEnter={matchedVocab ? () => showPopup(matchedVocab) : undefined}
-                onMouseLeave={matchedVocab ? scheduleClose : undefined}
-                className={`transition-colors duration-150 relative ${
-                  isActive
-                    ? "text-amber-600 bg-amber-100 rounded px-0.5 font-medium"
-                    : isPast
-                      ? "text-slate-700"
-                      : "text-slate-400"
-                } ${matchedVocab ? "underline decoration-violet-400 decoration-2 underline-offset-4 cursor-pointer" : ""}`}
-              >
-                {wb.w}
-                {activeVocab === matchedVocab && (
-                  <AnimatePresence>
-                    <VocabPopup vocab={activeVocab} onClose={() => setActiveVocab(null)} onMouseEnter={cancelClose} onMouseLeave={scheduleClose} />
-                  </AnimatePresence>
-                )}
-              </span>
-            );
-          })}
-        </span>
-      </div>
-    );
-  }
-
-  // Static text: mark vocab words with special styling
-  if (!vocab || vocab.length === 0) {
-    return <span className="leading-[2] text-lg sm:text-xl text-slate-700">{text}</span>;
-  }
-
-  // Split text around vocab words for highlighting
-  const parts: { text: string; vocab?: VocabItem }[] = [];
-  let remaining = text;
-  while (remaining.length > 0) {
-    let earliest = -1;
-    let earliestVocab: VocabItem | null = null;
-    for (const v of vocab) {
-      const idx = remaining.indexOf(v.word);
-      if (idx !== -1 && (earliest === -1 || idx < earliest)) {
-        earliest = idx;
-        earliestVocab = v;
-      }
-    }
-    if (earliest === -1 || !earliestVocab) {
-      parts.push({ text: remaining });
-      break;
-    }
-    if (earliest > 0) parts.push({ text: remaining.slice(0, earliest) });
-    parts.push({ text: earliestVocab.word, vocab: earliestVocab });
-    remaining = remaining.slice(earliest + earliestVocab.word.length);
-  }
 
   return (
-    <div ref={containerRef} className="relative" onClick={() => setActiveVocab(null)}>
-      <span className="leading-[2] text-lg sm:text-xl text-slate-700">
-        {parts.map((p, i) =>
-          p.vocab ? (
-            <span
-              key={i}
-              onClick={(e) => handleVocabClick(p.vocab!, e)}
-              onMouseEnter={() => showPopup(p.vocab!)}
-              onMouseLeave={scheduleClose}
-              className="text-violet-600 font-medium underline decoration-violet-300 decoration-2 underline-offset-4 cursor-pointer hover:bg-violet-50 rounded px-0.5 relative"
+    <div className={`w-full h-full overflow-y-auto bg-gradient-to-br ${page.bg || "from-amber-50 to-orange-50"} p-4 sm:p-6`}>
+      <h2 className="text-xl font-bold text-slate-700 text-center mb-1">{page.text}</h2>
+      {page.subtitle && <p className="text-sm text-slate-400 text-center mb-4">{page.subtitle}</p>}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {page.vocab?.map((v, i) => (
+          <div
+            key={i}
+            className="bg-white/80 backdrop-blur-sm rounded-lg px-3 py-2.5 flex items-center gap-3 shadow-sm"
+          >
+            <span className="text-lg font-bold text-amber-700 shrink-0">{v.word}</span>
+            <div className="flex-1 min-w-0">
+              <span className="text-xs text-slate-400 font-mono">{v.pinyin}</span>
+              <p className="text-xs text-slate-600 truncate">{v.meaning}</p>
+            </div>
+            <button
+              onClick={() => speak(v.word, v.meaning)}
+              className="p-1.5 rounded-full bg-amber-100 text-amber-600 hover:bg-amber-200 shrink-0"
             >
-              {p.text}
-              {activeVocab === p.vocab && (
-                <AnimatePresence>
-                  <VocabPopup vocab={activeVocab} onClose={() => setActiveVocab(null)} onMouseEnter={cancelClose} onMouseLeave={scheduleClose} />
-                </AnimatePresence>
-              )}
-            </span>
-          ) : (
-            <span key={i}>{p.text}</span>
-          )
-        )}
-      </span>
-    </div>
-  );
-}
-
-/* ─── Page View — full-image with text overlay ─── */
-function PageView({
-  page,
-  pageNum,
-  totalPages,
-  isPlaying,
-  activeWordIdx,
-}: {
-  page: BookPage;
-  pageNum: number;
-  totalPages: number;
-  isPlaying: boolean;
-  activeWordIdx: number;
-}) {
-  const pos = page.textPosition || "bottom";
-  const posClass =
-    pos === "top"
-      ? "justify-start pt-6"
-      : pos === "center"
-        ? "justify-center"
-        : "justify-end pb-6";
-
-  return (
-    <div className="flex flex-col h-full">
-      <div
-        className={`flex-1 flex flex-col ${posClass} items-center bg-gradient-to-br ${page.bg || "from-slate-100 to-slate-200"} rounded-2xl px-4 py-6 sm:px-6 sm:py-8 relative overflow-hidden`}
-      >
-        {/* Emoji / image in background */}
-        {page.emoji && (
-          <span className="absolute inset-0 flex items-center justify-center text-7xl sm:text-9xl select-none opacity-80 pointer-events-none">
-            {page.emoji}
-          </span>
-        )}
-        {/* Text overlay */}
-        <div className="relative z-10 bg-white/85 backdrop-blur-sm rounded-xl px-5 py-4 sm:px-8 sm:py-5 max-w-lg w-full shadow-sm">
-          <RichText
-            text={page.text}
-            words={page.words}
-            activeIdx={activeWordIdx}
-            isPlaying={isPlaying}
-            vocab={page.vocab}
-          />
-          {page.subtitle && (
-            <p className="text-center text-sm text-slate-400 mt-2">{page.subtitle}</p>
-          )}
-        </div>
-        <span className="absolute bottom-2 right-3 text-xs text-white/50 font-mono">
-          {pageNum}/{totalPages}
-        </span>
+              <Volume2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
 /* ─── Book Reader ─── */
-function BookReader({
-  book,
-  onBack,
-}: {
-  book: Book;
-  onBack: () => void;
-}) {
-  const [pageIdx, setPageIdx] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
+function BookReader({ book, onBack }: { book: Book; onBack: () => void }) {
+  // Filter out vocab-summary for content pages, keep it separate
+  const contentPages = book.pages.filter(p => p.layout !== "vocab-summary");
+  const vocabPage = book.pages.find(p => p.layout === "vocab-summary");
+  const totalContentPages = contentPages.length;
+
+  // Spread = pair of pages. For spread view, we step by 2.
+  // spreadIdx is the index of the LEFT page in the spread.
+  const [spreadIdx, setSpreadIdx] = useState(0);
+  const [showVocab, setShowVocab] = useState(false);
+  const [playingPageIdx, setPlayingPageIdx] = useState<number | null>(null);
   const [activeWordIdx, setActiveWordIdx] = useState(-1);
   const [autoPlay, setAutoPlay] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<number | null>(null);
+  const autoPlayRef = useRef(false);
 
-  const page = book.pages[pageIdx];
-  const hasNext = pageIdx < book.pages.length - 1;
-  const hasPrev = pageIdx > 0;
+  // Sync autoPlayRef
+  useEffect(() => { autoPlayRef.current = autoPlay; }, [autoPlay]);
 
-  // Cleanup on unmount
+  // Responsive check
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // Cleanup
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
       if (timerRef.current) cancelAnimationFrame(timerRef.current);
     };
   }, []);
 
-  // Stop and destroy audio entirely
   const stopAudio = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-    if (timerRef.current) {
-      cancelAnimationFrame(timerRef.current);
-      timerRef.current = null;
-    }
-    setIsPlaying(false);
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    if (timerRef.current) { cancelAnimationFrame(timerRef.current); timerRef.current = null; }
+    setPlayingPageIdx(null);
     setActiveWordIdx(-1);
   }, []);
 
-  // Start word-tracking RAF loop
   const startTick = useCallback((words: WordBoundary[]) => {
     if (timerRef.current) cancelAnimationFrame(timerRef.current);
     const tick = () => {
@@ -347,215 +266,262 @@ function BookReader({
     timerRef.current = requestAnimationFrame(tick);
   }, []);
 
-  const playPage = useCallback(() => {
+  // Play a specific page
+  const playPage = useCallback((pageIdx: number) => {
     stopAudio();
+    const page = contentPages[pageIdx];
+    if (!page || !page.audio) return;
 
     const audio = new Audio(page.audio);
     audioRef.current = audio;
-    setIsPlaying(true);
+    setPlayingPageIdx(pageIdx);
 
     audio.onplay = () => startTick(page.words);
     audio.onended = () => {
-      setIsPlaying(false);
+      setPlayingPageIdx(null);
       setActiveWordIdx(-1);
       if (timerRef.current) cancelAnimationFrame(timerRef.current);
-      if (autoPlay && hasNext) {
-        setTimeout(() => setPageIdx((i) => i + 1), 800);
+
+      // Auto-play: advance to next page
+      if (autoPlayRef.current) {
+        const nextIdx = pageIdx + 1;
+        if (nextIdx < totalContentPages) {
+          // If we need to flip to next spread (desktop)
+          setTimeout(() => {
+            if (!autoPlayRef.current) return;
+            // Check if nextIdx is on current spread or needs flip
+            const currentSpreadStart = isMobile ? nextIdx : Math.floor(nextIdx / 2) * 2;
+            setSpreadIdx(currentSpreadStart);
+            setTimeout(() => {
+              if (autoPlayRef.current) playPage(nextIdx);
+            }, 600);
+          }, 400);
+        } else {
+          setAutoPlay(false);
+        }
       }
     };
 
-    audio.play().catch(() => setIsPlaying(false));
-  }, [page, stopAudio, startTick, autoPlay, hasNext]);
+    audio.play().catch(() => { setPlayingPageIdx(null); });
+  }, [contentPages, totalContentPages, stopAudio, startTick, isMobile]);
 
-  // Pause: keep audio alive, stop tracking
-  const pauseAudio = useCallback(() => {
-    if (audioRef.current) audioRef.current.pause();
-    if (timerRef.current) { cancelAnimationFrame(timerRef.current); timerRef.current = null; }
-    setIsPlaying(false);
-  }, []);
-
-  // Resume: play existing audio, restart tracking
-  const resumeAudio = useCallback(() => {
-    if (!audioRef.current) { playPage(); return; }
-    setIsPlaying(true);
-    startTick(page.words);
-    audioRef.current.play().catch(() => setIsPlaying(false));
-  }, [page, playPage, startTick]);
-
-  // Auto-play when page changes during autoPlay
-  useEffect(() => {
+  // Tap text handler
+  const handleTapText = useCallback((pageIdx: number) => {
     if (autoPlay) {
-      const t = setTimeout(playPage, 500);
-      return () => clearTimeout(t);
+      // Tapping during auto-play exits auto-play
+      setAutoPlay(false);
+      stopAudio();
+      return;
     }
-  }, [pageIdx, autoPlay, playPage]);
+    if (playingPageIdx === pageIdx) {
+      // Tapping the same page stops playback
+      stopAudio();
+    } else {
+      playPage(pageIdx);
+    }
+  }, [playingPageIdx, autoPlay, stopAudio, playPage]);
 
-  const goPage = (dir: number) => {
+  // Navigation
+  const step = isMobile ? 1 : 2;
+  const maxSpreadIdx = isMobile ? totalContentPages - 1 : Math.max(0, totalContentPages - 2 + (totalContentPages % 2));
+  const hasPrev = spreadIdx > 0;
+
+  const goNext = useCallback(() => {
     stopAudio();
     setAutoPlay(false);
-    setPageIdx((i) => Math.max(0, Math.min(book.pages.length - 1, i + dir)));
-  };
-
-  const togglePlay = () => {
-    if (isPlaying) {
-      pauseAudio();
-      setAutoPlay(false);
-    } else if (audioRef.current) {
-      resumeAudio();
+    if (showVocab) return;
+    const nextIdx = spreadIdx + step;
+    if (nextIdx >= totalContentPages) {
+      if (vocabPage) setShowVocab(true);
     } else {
-      playPage();
+      setSpreadIdx(Math.min(nextIdx, maxSpreadIdx));
     }
-  };
+  }, [spreadIdx, step, totalContentPages, maxSpreadIdx, showVocab, vocabPage, stopAudio]);
 
-  const startAutoPlay = () => {
+  const goPrev = useCallback(() => {
     stopAudio();
-    setAutoPlay(true);
-    setPageIdx(0);
-  };
+    setAutoPlay(false);
+    if (showVocab) {
+      setShowVocab(false);
+      return;
+    }
+    setSpreadIdx(Math.max(0, spreadIdx - step));
+  }, [spreadIdx, step, showVocab, stopAudio]);
 
-  // Keyboard navigation
+  // Auto-play
+  const startAutoPlay = useCallback(() => {
+    stopAudio();
+    setShowVocab(false);
+    setSpreadIdx(0);
+    setAutoPlay(true);
+    setTimeout(() => playPage(0), 500);
+  }, [stopAudio, playPage]);
+
+  const stopAutoPlay = useCallback(() => {
+    setAutoPlay(false);
+    stopAudio();
+  }, [stopAudio]);
+
+  // Keyboard
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft" && hasPrev) goPage(-1);
-      if (e.key === "ArrowRight" && hasNext) goPage(1);
-      if (e.key === " ") {
-        e.preventDefault();
-        togglePlay();
-      }
+      if (e.key === "ArrowRight") goNext();
+      if (e.key === "ArrowLeft") goPrev();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  });
+  }, [goNext, goPrev]);
 
   // Touch swipe
   const touchStart = useRef<number | null>(null);
 
+  // Current visible pages
+  const leftPage = contentPages[spreadIdx];
+  const rightPage = !isMobile && spreadIdx + 1 < totalContentPages ? contentPages[spreadIdx + 1] : null;
+
+  // Total spreads for dot indicator
+  const totalSpreads = isMobile ? totalContentPages : Math.ceil(totalContentPages / 2);
+  const currentSpreadNum = isMobile ? spreadIdx : Math.floor(spreadIdx / 2);
+
   return (
-    <div className="flex flex-col h-dvh bg-gradient-to-br from-amber-50 to-orange-50">
+    <div className="flex flex-col h-dvh bg-amber-900/10">
       {/* Header */}
-      <header className="shrink-0 px-4 py-3 flex items-center justify-between bg-white/80 backdrop-blur-sm border-b border-amber-200/50">
-        <button
-          onClick={onBack}
-          className="text-slate-500 hover:text-slate-700 p-1"
-        >
+      <header className="shrink-0 px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between bg-white/90 backdrop-blur-sm border-b border-amber-200/50">
+        <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="text-base font-bold text-slate-700 truncate mx-2">
-          {book.title}
-        </h1>
+        <h1 className="text-sm sm:text-base font-bold text-slate-700 truncate mx-2">{book.title}</h1>
         <button
-          onClick={startAutoPlay}
-          className="text-xs px-3 py-1.5 bg-amber-100 text-amber-700 rounded-full hover:bg-amber-200 font-medium transition-colors"
+          onClick={autoPlay ? stopAutoPlay : startAutoPlay}
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+            autoPlay
+              ? "bg-amber-500 text-white"
+              : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+          }`}
         >
-          {autoPlay ? "自动播放中…" : "自动播放"}
+          {autoPlay ? <StopCircle className="w-3.5 h-3.5" /> : <PlayCircle className="w-3.5 h-3.5" />}
+          {autoPlay ? "停止" : "自动播放"}
         </button>
       </header>
 
       {/* Book content */}
       <div
-        className="flex-1 flex flex-col px-3 py-3 sm:px-6 sm:py-4 overflow-hidden"
-        onTouchStart={(e) => {
-          touchStart.current = e.touches[0].clientX;
-        }}
+        className="flex-1 flex items-center justify-center px-2 py-2 sm:px-6 sm:py-4 overflow-hidden"
+        onTouchStart={(e) => { touchStart.current = e.touches[0].clientX; }}
         onTouchEnd={(e) => {
           if (touchStart.current === null) return;
           const dx = e.changedTouches[0].clientX - touchStart.current;
           touchStart.current = null;
           if (Math.abs(dx) > 60) {
-            if (dx < 0 && hasNext) goPage(1);
-            if (dx > 0 && hasPrev) goPage(-1);
+            if (dx < 0) goNext();
+            if (dx > 0) goPrev();
           }
         }}
       >
-        <div className="flex-1 max-w-2xl w-full mx-auto flex flex-col rounded-2xl shadow-lg overflow-hidden">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={pageIdx}
-              initial={{ opacity: 0, x: 40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -40 }}
-              transition={{ duration: 0.25 }}
-              className="flex-1 flex flex-col"
-            >
-              <PageView
-                page={page}
-                pageNum={pageIdx + 1}
-                totalPages={book.pages.length}
-                isPlaying={isPlaying}
-                activeWordIdx={activeWordIdx}
-              />
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </div>
-
-      {/* Controls */}
-      <div className="shrink-0 px-4 py-3 sm:py-4 bg-white/80 backdrop-blur-sm border-t border-amber-200/50">
-        <div className="max-w-md mx-auto flex items-center justify-between gap-4">
+        {/* Book frame */}
+        <div className="relative w-full max-w-5xl h-full max-h-[80vh] flex">
+          {/* Left arrow */}
           <button
-            onClick={() => goPage(-1)}
-            disabled={!hasPrev}
-            className="p-3 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-30"
+            onClick={goPrev}
+            disabled={!hasPrev && !showVocab}
+            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 z-20 p-2 rounded-full bg-white/80 shadow-md text-slate-500 hover:text-slate-700 hover:bg-white disabled:opacity-0 transition-all"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={togglePlay}
-              className="w-14 h-14 rounded-full bg-amber-500 text-white flex items-center justify-center hover:bg-amber-600 active:scale-95 transition-all shadow-lg"
+          {/* Book spread */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={showVocab ? "vocab" : `spread-${spreadIdx}`}
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.3 }}
+              className="flex-1 flex rounded-xl sm:rounded-2xl overflow-hidden shadow-xl bg-amber-50 border border-amber-200/60"
             >
-              {isPlaying ? (
-                <Pause className="w-6 h-6" />
+              {showVocab && vocabPage ? (
+                <VocabSummaryPanel page={vocabPage} />
               ) : (
-                <Play className="w-6 h-6 ml-0.5" />
+                <>
+                  {/* Left page */}
+                  <div className={`${isMobile ? "w-full" : "w-1/2 border-r border-amber-200/40"} h-full`}>
+                    {leftPage && (
+                      <PagePanel
+                        page={leftPage}
+                        pageIdx={spreadIdx}
+                        playingPageIdx={playingPageIdx}
+                        activeWordIdx={activeWordIdx}
+                        onTapText={handleTapText}
+                      />
+                    )}
+                  </div>
+                  {/* Right page (desktop only) */}
+                  {!isMobile && (
+                    <div className="w-1/2 h-full">
+                      {rightPage ? (
+                        <PagePanel
+                          page={rightPage}
+                          pageIdx={spreadIdx + 1}
+                          playingPageIdx={playingPageIdx}
+                          activeWordIdx={activeWordIdx}
+                          onTapText={handleTapText}
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-amber-50/50 flex items-center justify-center">
+                          <span className="text-slate-300 text-sm">— 本页留白 —</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
-            </button>
-            <button
-              onClick={() => {
-                stopAudio();
-                setAutoPlay(false);
-                setPageIdx(0);
-              }}
-              className="p-2 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 active:scale-95 transition-all"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
-          </div>
+            </motion.div>
+          </AnimatePresence>
 
+          {/* Right arrow */}
           <button
-            onClick={() => goPage(1)}
-            disabled={!hasNext}
-            className="p-3 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-30"
+            onClick={goNext}
+            disabled={showVocab}
+            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1 z-20 p-2 rounded-full bg-white/80 shadow-md text-slate-500 hover:text-slate-700 hover:bg-white disabled:opacity-0 transition-all"
           >
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
+      </div>
 
-        {/* Page dots */}
-        <div className="flex justify-center gap-1.5 mt-3">
-          {book.pages.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => {
-                stopAudio();
-                setAutoPlay(false);
-                setPageIdx(i);
-              }}
-              className={`w-2 h-2 rounded-full transition-all ${
-                i === pageIdx
-                  ? "bg-amber-500 w-4"
-                  : "bg-slate-300 hover:bg-slate-400"
-              }`}
-            />
-          ))}
-        </div>
+      {/* Page dots */}
+      <div className="shrink-0 flex justify-center gap-1.5 py-2 sm:py-3">
+        {Array.from({ length: totalSpreads }).map((_, i) => (
+          <button
+            key={i}
+            onClick={() => {
+              stopAudio();
+              setAutoPlay(false);
+              setShowVocab(false);
+              setSpreadIdx(isMobile ? i : i * 2);
+            }}
+            className={`h-1.5 rounded-full transition-all ${
+              !showVocab && i === currentSpreadNum
+                ? "bg-amber-500 w-5"
+                : "bg-slate-300 hover:bg-slate-400 w-1.5"
+            }`}
+          />
+        ))}
+        {/* Vocab dot */}
+        {vocabPage && (
+          <button
+            onClick={() => { stopAudio(); setAutoPlay(false); setShowVocab(true); }}
+            className={`h-1.5 rounded-full transition-all ${
+              showVocab ? "bg-violet-500 w-5" : "bg-violet-200 hover:bg-violet-300 w-1.5"
+            }`}
+          />
+        )}
       </div>
     </div>
   );
 }
 
-/* ─── Book Shelf (list of books) ─── */
+/* ─── Book Shelf ─── */
 function BookShelf({ onSelect }: { onSelect: (bookId: string) => void }) {
   return (
     <div className="min-h-dvh bg-gradient-to-br from-amber-50 to-orange-50">
@@ -564,35 +530,54 @@ function BookShelf({ onSelect }: { onSelect: (bookId: string) => void }) {
           <Link href="/" className="text-slate-500 hover:text-slate-700 p-1">
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">绘本馆 📚</h1>
-            <p className="text-xs text-slate-500">点一本，听一听</p>
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-6 h-6 text-amber-600" />
+            <div>
+              <h1 className="text-xl font-bold text-slate-800">绘本馆</h1>
+              <p className="text-xs text-slate-500">点一本，听一听</p>
+            </div>
           </div>
         </div>
       </header>
 
       <div className="max-w-3xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
           {BOOKS.map((b) => (
             <button
               key={b.id}
               onClick={() => onSelect(b.id)}
-              className="bg-white rounded-2xl shadow-md hover:shadow-lg p-5 flex flex-col items-center gap-3 transition-all active:scale-[0.97] border border-amber-100"
+              className="bg-white rounded-2xl shadow-md hover:shadow-xl p-0 flex flex-col items-stretch transition-all active:scale-[0.97] border border-amber-100 overflow-hidden group"
             >
-              <span className="text-5xl">{b.emoji}</span>
-              <span className="font-bold text-slate-700 text-sm">
-                {b.title}
-              </span>
-              <span className="text-[10px] text-slate-400">
-                适合 {b.ageRange} 岁
-              </span>
+              <div className="relative aspect-[3/4] w-full overflow-hidden bg-gradient-to-br from-amber-50 to-orange-50">
+                {b.cover ? (
+                  <Image
+                    src={b.cover}
+                    alt={b.title}
+                    fill
+                    className="object-cover group-hover:scale-105 transition-transform duration-300"
+                    sizes="(max-width: 640px) 50vw, 33vw"
+                    unoptimized={b.cover.endsWith(".svg")}
+                  />
+                ) : (
+                  <span className="absolute inset-0 flex items-center justify-center text-5xl select-none">
+                    {b.emoji}
+                  </span>
+                )}
+              </div>
+              <div className="px-3 py-3 text-left">
+                <p className="font-bold text-slate-700 text-sm truncate">{b.title}</p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full font-medium">
+                    {b.ageRange} 岁
+                  </span>
+                  <span className="text-[10px] text-slate-400">{b.pageCount} 页</span>
+                </div>
+              </div>
             </button>
           ))}
-
-          {/* Placeholder for future books */}
-          <div className="bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 p-5 flex flex-col items-center justify-center gap-2 opacity-50">
-            <span className="text-3xl">📝</span>
-            <span className="text-xs text-slate-400">更多绘本制作中…</span>
+          <div className="bg-white/50 rounded-2xl border-2 border-dashed border-amber-200 flex flex-col items-center justify-center gap-3 opacity-60 aspect-[3/5]">
+            <span className="text-4xl">✨</span>
+            <span className="text-xs text-slate-500 font-medium">更多绘本制作中…</span>
           </div>
         </div>
       </div>
@@ -600,9 +585,13 @@ function BookShelf({ onSelect }: { onSelect: (bookId: string) => void }) {
   );
 }
 
-/* ─── Main Page ─── */
+/* ─── Main ─── */
 export default function PictureBookPage() {
-  return <RequireAuth><PictureBooksInner /></RequireAuth>;
+  return (
+    <RequireAuth>
+      <PictureBooksInner />
+    </RequireAuth>
+  );
 }
 
 function PictureBooksInner() {
@@ -635,15 +624,7 @@ function PictureBooksInner() {
   }
 
   if (selectedBook && book) {
-    return (
-      <BookReader
-        book={book}
-        onBack={() => {
-          setSelectedBook(null);
-          setBook(null);
-        }}
-      />
-    );
+    return <BookReader book={book} onBack={() => { setSelectedBook(null); setBook(null); }} />;
   }
 
   return <BookShelf onSelect={loadBook} />;

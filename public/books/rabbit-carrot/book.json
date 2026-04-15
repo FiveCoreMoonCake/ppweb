@@ -32,7 +32,9 @@
           "e": 2556
         }
       ],
-      "textPosition": "center"
+      "textPosition": "center",
+      "image": "/books/rabbit-carrot/p1.svg",
+      "layout": "image-full"
     },
     {
       "text": "在一片美丽的大森林里，住着一只可爱的小白兔。她有一身雪白雪白的毛，一双长长的耳朵，还有一条短短的小尾巴。大家都叫她白白。",
@@ -231,29 +233,9 @@
           "e": 16740
         }
       ],
-      "vocab": [
-        {
-          "word": "森林",
-          "pinyin": "sēn lín",
-          "meaning": "很多很多树长在一起的地方"
-        },
-        {
-          "word": "雪白",
-          "pinyin": "xuě bái",
-          "meaning": "像雪一样白，非常白"
-        },
-        {
-          "word": "尾巴",
-          "pinyin": "wěi ba",
-          "meaning": "动物身体后面的部分"
-        },
-        {
-          "word": "耳朵",
-          "pinyin": "ěr duo",
-          "meaning": "用来听声音的，长在头两边"
-        }
-      ],
-      "textPosition": "bottom"
+      "textPosition": "bottom",
+      "image": "/books/rabbit-carrot/p2.svg",
+      "layout": "image-top"
     },
     {
       "text": "一天早上，白白醒来，觉得肚子好饿好饿。她打开小冰箱一看，里面空空的，什么都没有了。“哎呀，我的萝卜都吃完了！”白白拍拍肚子说，“我得出门去找萝卜！”",
@@ -458,28 +440,8 @@
         }
       ],
       "textPosition": "bottom",
-      "vocab": [
-        {
-          "word": "醒",
-          "pinyin": "xǐng",
-          "meaning": "睡觉以后睁开眼睛"
-        },
-        {
-          "word": "饿",
-          "pinyin": "è",
-          "meaning": "肚子空空的，想吃东西"
-        },
-        {
-          "word": "冰箱",
-          "pinyin": "bīng xiāng",
-          "meaning": "让食物保持冷冷的大箱子"
-        },
-        {
-          "word": "萝卜",
-          "pinyin": "luó bo",
-          "meaning": "一种蔬菜，兔子最爱吃"
-        }
-      ]
+      "image": "/books/rabbit-carrot/p3.svg",
+      "layout": "image-top"
     },
     {
       "text": "白白来到了小河边。清清的河水哗哗地流着，河里有好多小鱼在游来游去。一只青蛙坐在荷叶上，呱呱地叫。白白问青蛙：“请问，你知道哪里有萝卜吗？”青蛙摇摇头说：“我只知道哪里有虫子，不知道哪里有萝卜。”",
@@ -773,29 +735,9 @@
           "e": 26892
         }
       ],
-      "vocab": [
-        {
-          "word": "哗哗",
-          "pinyin": "huā huā",
-          "meaning": "水流动的声音"
-        },
-        {
-          "word": "青蛙",
-          "pinyin": "qīng wā",
-          "meaning": "绿色的小动物，会呱呱叫"
-        },
-        {
-          "word": "荷叶",
-          "pinyin": "hé yè",
-          "meaning": "荷花的大叶子，圆圆的"
-        },
-        {
-          "word": "虫子",
-          "pinyin": "chóng zi",
-          "meaning": "很小的爬行动物"
-        }
-      ],
-      "textPosition": "bottom"
+      "textPosition": "bottom",
+      "image": "/books/rabbit-carrot/p4.svg",
+      "layout": "image-top"
     },
     {
       "text": "白白又来到了大树下。树上挂满了红红的大苹果，一只小松鼠在树枝间跳来跳去。白白仰起头问：“小松鼠，你知道哪里有萝卜吗？”小松鼠抱着一颗松果说：“萝卜？萝卜长在地底下呀！你应该去菜园里找找看。”",
@@ -1114,29 +1056,9 @@
           "e": 26928
         }
       ],
-      "vocab": [
-        {
-          "word": "继续",
-          "pinyin": "jì xù",
-          "meaning": "不停下来，接着做"
-        },
-        {
-          "word": "松鼠",
-          "pinyin": "sōng shǔ",
-          "meaning": "尾巴大大的、住在树上的小动物"
-        },
-        {
-          "word": "松果",
-          "pinyin": "sōng guǒ",
-          "meaning": "松树上结的果实"
-        },
-        {
-          "word": "泥土",
-          "pinyin": "ní tǔ",
-          "meaning": "地上的土，可以种东西"
-        }
-      ],
-      "textPosition": "bottom"
+      "textPosition": "bottom",
+      "image": "/books/rabbit-carrot/p5.svg",
+      "layout": "image-top"
     },
     {
       "text": "“菜园在哪里呢？”白白顺着小路走啊走，翻过一座小山坡，穿过一片花田。走了好久好久，她的小脚都酸了。但她没有放弃，继续往前走。终于，她看到了远处有一大片绿油油的菜地！",
@@ -1380,29 +1302,9 @@
           "e": 23184
         }
       ],
-      "vocab": [
-        {
-          "word": "累",
-          "pinyin": "lèi",
-          "meaning": "做了很多事很疲倦，想休息"
-        },
-        {
-          "word": "叹气",
-          "pinyin": "tàn qì",
-          "meaning": "不开心的时候长长地出气"
-        },
-        {
-          "word": "蝴蝶",
-          "pinyin": "hú dié",
-          "meaning": "有漂亮翅膀会飞的小昆虫"
-        },
-        {
-          "word": "菜园",
-          "pinyin": "cài yuán",
-          "meaning": "种蔬菜的地方"
-        }
-      ],
-      "textPosition": "bottom"
+      "textPosition": "bottom",
+      "image": "/books/rabbit-carrot/p6.svg",
+      "layout": "image-top"
     },
     {
       "text": "哇！好大的菜园呀！红的萝卜、白的萝卜、橙色的萝卜，一个一个从泥土里探出头来，好像在对白白笑呢！白白开心极了，她高兴得跳了起来。",
@@ -1606,29 +1508,9 @@
           "e": 18432
         }
       ],
-      "vocab": [
-        {
-          "word": "翻",
-          "pinyin": "fān",
-          "meaning": "从一边转到另一边，越过去"
-        },
-        {
-          "word": "山坡",
-          "pinyin": "shān pō",
-          "meaning": "山的斜面，有高有低"
-        },
-        {
-          "word": "菜园",
-          "pinyin": "cài yuán",
-          "meaning": "种蔬菜的地方"
-        },
-        {
-          "word": "萝卜",
-          "pinyin": "luó bo",
-          "meaning": "一种蔬菜，兔子最爱吃"
-        }
-      ],
-      "textPosition": "bottom"
+      "textPosition": "bottom",
+      "image": "/books/rabbit-carrot/p7.svg",
+      "layout": "image-top"
     },
     {
       "text": "白白拔了一个最大最大的橙色萝卜，抱在怀里。回家的路上，她遇到了小刺猬。小刺猬饿得走不动路了。白白想了想，把萝卜掰成两半，分了一半给小刺猬。“谢谢你，白白！你真好！”小刺猬感动地说。",
@@ -1917,29 +1799,9 @@
           "e": 26640
         }
       ],
-      "vocab": [
-        {
-          "word": "拔",
-          "pinyin": "bá",
-          "meaning": "用力把东西从土里拉出来"
-        },
-        {
-          "word": "篮子",
-          "pinyin": "lán zi",
-          "meaning": "装东西的容器，有提手"
-        },
-        {
-          "word": "装",
-          "pinyin": "zhuāng",
-          "meaning": "把东西放进去"
-        },
-        {
-          "word": "满满",
-          "pinyin": "mǎn mǎn",
-          "meaning": "装得很多，都快放不下了"
-        }
-      ],
-      "textPosition": "bottom"
+      "textPosition": "bottom",
+      "image": "/books/rabbit-carrot/p8.svg",
+      "layout": "image-top"
     },
     {
       "text": "回到家，白白用半个萝卜做了一锅香喷喷的萝卜汤。她喝着热乎乎的汤，心里暖洋洋的。虽然只有半个萝卜，但她觉得这是世界上最好喝的汤。因为分享让食物变得更加美味了呀！",
@@ -2173,24 +2035,9 @@
           "e": 22356
         }
       ],
-      "vocab": [
-        {
-          "word": "分享",
-          "pinyin": "fēn xiǎng",
-          "meaning": "把自己的东西给别人一起用"
-        },
-        {
-          "word": "帮忙",
-          "pinyin": "bāng máng",
-          "meaning": "帮助别人做事情"
-        },
-        {
-          "word": "开心",
-          "pinyin": "kāi xīn",
-          "meaning": "很高兴，很快乐"
-        }
-      ],
-      "textPosition": "bottom"
+      "textPosition": "bottom",
+      "image": "/books/rabbit-carrot/p9.svg",
+      "layout": "image-top"
     },
     {
       "text": "从那以后，白白和小刺猬成了最好的朋友。他们经常一起去菜园找萝卜，一起做萝卜汤喝。森林里的小伙伴们都说：白白是最善良、最勇敢的小兔子！",
@@ -2380,7 +2227,163 @@
           "e": 18900
         }
       ],
+      "textPosition": "center",
+      "image": "/books/rabbit-carrot/p10.svg",
+      "layout": "image-top"
+    },
+    {
+      "layout": "vocab-summary",
+      "text": "生词表",
+      "subtitle": "本书出现的生词",
+      "audio": "",
+      "words": [],
+      "bg": "from-amber-50 to-orange-50",
       "vocab": [
+        {
+          "word": "森林",
+          "pinyin": "sēn lín",
+          "meaning": "很多很多树长在一起的地方"
+        },
+        {
+          "word": "雪白",
+          "pinyin": "xuě bái",
+          "meaning": "像雪一样白，非常白"
+        },
+        {
+          "word": "尾巴",
+          "pinyin": "wěi ba",
+          "meaning": "动物身体后面的部分"
+        },
+        {
+          "word": "耳朵",
+          "pinyin": "ěr duo",
+          "meaning": "用来听声音的，长在头两边"
+        },
+        {
+          "word": "醒",
+          "pinyin": "xǐng",
+          "meaning": "睡觉以后睁开眼睛"
+        },
+        {
+          "word": "饿",
+          "pinyin": "è",
+          "meaning": "肚子空空的，想吃东西"
+        },
+        {
+          "word": "冰箱",
+          "pinyin": "bīng xiāng",
+          "meaning": "让食物保持冷冷的大箱子"
+        },
+        {
+          "word": "萝卜",
+          "pinyin": "luó bo",
+          "meaning": "一种蔬菜，兔子最爱吃"
+        },
+        {
+          "word": "哗哗",
+          "pinyin": "huā huā",
+          "meaning": "水流动的声音"
+        },
+        {
+          "word": "青蛙",
+          "pinyin": "qīng wā",
+          "meaning": "绿色的小动物，会呱呱叫"
+        },
+        {
+          "word": "荷叶",
+          "pinyin": "hé yè",
+          "meaning": "荷花的大叶子，圆圆的"
+        },
+        {
+          "word": "虫子",
+          "pinyin": "chóng zi",
+          "meaning": "很小的爬行动物"
+        },
+        {
+          "word": "继续",
+          "pinyin": "jì xù",
+          "meaning": "不停下来，接着做"
+        },
+        {
+          "word": "松鼠",
+          "pinyin": "sōng shǔ",
+          "meaning": "尾巴大大的、住在树上的小动物"
+        },
+        {
+          "word": "松果",
+          "pinyin": "sōng guǒ",
+          "meaning": "松树上结的果实"
+        },
+        {
+          "word": "泥土",
+          "pinyin": "ní tǔ",
+          "meaning": "地上的土，可以种东西"
+        },
+        {
+          "word": "累",
+          "pinyin": "lèi",
+          "meaning": "做了很多事很疲倦，想休息"
+        },
+        {
+          "word": "叹气",
+          "pinyin": "tàn qì",
+          "meaning": "不开心的时候长长地出气"
+        },
+        {
+          "word": "蝴蝶",
+          "pinyin": "hú dié",
+          "meaning": "有漂亮翅膀会飞的小昆虫"
+        },
+        {
+          "word": "菜园",
+          "pinyin": "cài yuán",
+          "meaning": "种蔬菜的地方"
+        },
+        {
+          "word": "翻",
+          "pinyin": "fān",
+          "meaning": "从一边转到另一边，越过去"
+        },
+        {
+          "word": "山坡",
+          "pinyin": "shān pō",
+          "meaning": "山的斜面，有高有低"
+        },
+        {
+          "word": "拔",
+          "pinyin": "bá",
+          "meaning": "用力把东西从土里拉出来"
+        },
+        {
+          "word": "篮子",
+          "pinyin": "lán zi",
+          "meaning": "装东西的容器，有提手"
+        },
+        {
+          "word": "装",
+          "pinyin": "zhuāng",
+          "meaning": "把东西放进去"
+        },
+        {
+          "word": "满满",
+          "pinyin": "mǎn mǎn",
+          "meaning": "装得很多，都快放不下了"
+        },
+        {
+          "word": "分享",
+          "pinyin": "fēn xiǎng",
+          "meaning": "把自己的东西给别人一起用"
+        },
+        {
+          "word": "帮忙",
+          "pinyin": "bāng máng",
+          "meaning": "帮助别人做事情"
+        },
+        {
+          "word": "开心",
+          "pinyin": "kāi xīn",
+          "meaning": "很高兴，很快乐"
+        },
         {
           "word": "坚持",
           "pinyin": "jiān chí",
@@ -2396,8 +2399,8 @@
           "pinyin": "wēn nuǎn",
           "meaning": "暖暖的，让人心里舒服"
         }
-      ],
-      "textPosition": "center"
+      ]
     }
-  ]
+  ],
+  "cover": "/books/rabbit-carrot/cover.svg"
 }
