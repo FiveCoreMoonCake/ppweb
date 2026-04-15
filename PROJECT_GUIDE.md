@@ -1,7 +1,7 @@
 # PP 学习工具箱 - 项目框架文档
 
 > 本文档为 AI Agent 快速上手指南，每次新 Agent 启动时阅读此文档即可全面掌握项目情况。
-> 最后更新: 2026-04-12
+> 最后更新: 2026-04-14
 
 ---
 
@@ -50,7 +50,25 @@ ppweb/
 │   │   ├── login/
 │   │   │   └── page.tsx              # 登录页 - Google OAuth + Magic Link (190 行)
 │   │   ├── chinese-literacy/
-│   │   │   └── page.tsx              # 中文识字工具 (2133 行, 最复杂的模块)
+│   │   │   ├── page.tsx              # 中文识字 - 主页面 (模式路由 + 状态管理, ~210 行)
+│   │   │   ├── lib/
+│   │   │   │   ├── types.ts          # 共享类型定义 (CharRecord, QuizQuestion 等)
+│   │   │   │   ├── shuffle.ts        # Fisher-Yates 洗牌工具
+│   │   │   │   ├── voice.ts          # TTS/语音系统 (预录音频 + 浏览器 TTS)
+│   │   │   │   ├── supabase-progress.ts # Supabase 数据持久化 (进度 + 学习记录)
+│   │   │   │   ├── spaced-repetition.ts # 遗忘曲线算法 (Ebbinghaus 间隔)
+│   │   │   │   ├── sound-effects.ts  # 音效 (答对/答错/胜利)
+│   │   │   │   └── quiz-engine.ts    # 智能出题引擎 (防作弊 + 干扰项 + 去重)
+│   │   │   └── components/
+│   │   │       ├── CharCard.tsx       # 字卡组件 (PixelEmoji + 朗读按钮)
+│   │   │       ├── LearnMode.tsx      # 学习模式 (翻卡 + 分组导航)
+│   │   │       ├── QuizSettings.tsx   # 测验设置 (题目数量选择)
+│   │   │       ├── QuizPlay.tsx       # 测验答题 (2×2 选项 + 反馈)
+│   │   │       ├── QuizResults.tsx    # 测验结果 (复习 + 总结)
+│   │   │       ├── ListenQuizSettings.tsx # 听音选字设置
+│   │   │       ├── ListenQuizPlay.tsx # 听音选字 3×3 游戏
+│   │   │       ├── ListenQuizResults.tsx # 听音选字结果
+│   │   │       └── WrongList.tsx      # 易错字表 + 专项练习
 │   │   ├── picture-books/
 │   │   │   └── page.tsx              # 绘本馆 (650 行)
 │   │   ├── property-law/
@@ -162,9 +180,34 @@ ppweb/
 - 接收 `?redirect=xxx` 参数，登录后跳回原页面
 - 用 `<Suspense>` 包裹（Next.js 16 要求 useSearchParams 必须在 Suspense 内）
 
-### 5.3 中文识字 (`/chinese-literacy` → 2133 行)
+### 5.3 中文识字 (`/chinese-literacy`)
 
-**最复杂的模块**，包含多个子模式：
+**已模块化拆分**，包含多个子模式：
+
+#### 文件结构
+
+```
+chinese-literacy/
+├── page.tsx                  # 主页面 (~210 行): 模式路由 + 全局状态
+├── lib/                      # 纯逻辑层
+│   ├── types.ts              # 所有共享类型
+│   ├── shuffle.ts            # Fisher-Yates 洗牌
+│   ├── voice.ts              # TTS/预录音频系统
+│   ├── supabase-progress.ts  # 数据库读写
+│   ├── spaced-repetition.ts  # 遗忘曲线算法
+│   ├── sound-effects.ts      # 音效合成
+│   └── quiz-engine.ts        # 智能出题引擎
+└── components/               # UI 组件层
+    ├── CharCard.tsx           # 字卡 (共享)
+    ├── LearnMode.tsx          # 学习模式
+    ├── QuizSettings.tsx       # 测验设置
+    ├── QuizPlay.tsx           # 测验答题
+    ├── QuizResults.tsx        # 测验结果
+    ├── ListenQuizSettings.tsx # 听音选字设置
+    ├── ListenQuizPlay.tsx     # 听音选字游戏
+    ├── ListenQuizResults.tsx  # 听音选字结果
+    └── WrongList.tsx          # 易错字表
+```
 
 #### 模式流转
 ```
@@ -177,13 +220,7 @@ Menu（主菜单）
 
 #### 核心数据结构
 ```typescript
-interface CharItem {
-  char: string;           // 汉字
-  readings: CharReading[];// 读音(支持多音字)
-  groupId: string;        // 所属分组 (p1~p25)
-  explain?: string;       // 解释
-}
-
+// lib/types.ts
 interface CharRecord {
   right: number;          // 累计正确次数
   wrong: number;          // 累计错误次数
@@ -193,41 +230,90 @@ interface CharRecord {
 }
 ```
 
-#### 智能出题算法（`generateQuiz`）
-按比例分配出题，替代了之前的纯随机：
+#### 智能出题算法（`lib/quiz-engine.ts` — `generateQuiz`）
 
-| 优先级 | 类别 | 条件 | 占比 |
-|--------|------|------|------|
-| 1 | 易错字 | 正确率 < 50% 且答题 ≥ 3 次 | ~40% |
-| 2 | 遗忘曲线到期 | nextReview ≤ 今天 | ~30% |
-| 3 | 新字 | 从未答题 | ~20% |
-| 4 | 随机补充 | 其余字 | ~10% |
+**防作弊优先级设计**：孩子可能故意把已会的字答错，试图让测验变简单。算法通过反转优先级来防止这种策略：
 
-#### 遗忘曲线（`recordAnswerLocal`）
+| 优先级 | 类别 | 条件 | 占比 | 防作弊原理 |
+|--------|------|------|------|-----------|
+| 1 | **新字** | 已学但从未答题 | **40%** | 最高优先级，孩子无法回避 |
+| 2 | 到期复习 | nextReview ≤ 今天 | 25% | 遗忘曲线到期 |
+| 3 | 易错字 | 正确率 < 50% 且答题 ≥ 3 且 **level < 3** | 25% | level ≥ 3 自动毕业（连续答对 3 次证明已掌握） |
+| 4 | 随机补充 | 其余字 | 10% | 背景维护 |
+
+**出题范围**：不再手动选择分组，自动使用 `progress`（已学字集合）作为出题范围。
+
+**Level 毕业机制**：即使累计正确率 < 50%，只要 level ≥ 3（近期连续答对 3+ 次），该字就不再算"易错字"，从易错桶毕业。这防止了孩子通过故意做错旧字来填满易错桶的策略。
+
+**干扰项选择**（Fix B）：优先选同组字作为干扰项（更具挑战性），不足时从其他组补充，最后从全局字库兜底。
+
+**分配精度**（Fix A）：使用 `Math.floor` + 余数分配，防止 `Math.round` 导致总数溢出。
+
+**去重**（Fix C）：前向+后向交换，确保连续题目不出现同一个字。
+
+#### 遗忘曲线（`lib/spaced-repetition.ts` — `recordAnswerLocal`）
 ```
 EBBINGHAUS_INTERVALS = [1, 2, 4, 7, 15, 30] 天
 level:                   0  1  2  3   4   5
 
 答对 → level + 1, nextReview = today + intervals[level]
-答错 → level = 0, nextReview = today + 1
+答错 → level = max(0, level - 2)  // 柔性衰减，降 2 级而非归零
+         nextReview = today + intervals[newLevel]
 level 5 答对 → mastered = true
 ```
 
-#### 易错字表（`WrongList` 组件）
+#### 易错字表（`components/WrongList.tsx`）
 - 筛选：正确率 < 50% 且答题次数 ≥ 3
 - 展示：字 + 正确率进度条 + 错误/总次数 + 发音按钮
 - 可发起专项测验（只出易错字）
 
-#### 语音系统 (TTS + 预录音频)
+#### 语音系统 (`lib/voice.ts`)
 - 优先使用预录 MP3 → 回退到 Web Speech API
 - 全局中断机制：`_abortId` 递增
-- 音效：AudioContext 合成
+- 音效 (`lib/sound-effects.ts`)：AudioContext 合成（答对/答错/胜利）
 
-### 5.4 绘本馆 (`/picture-books` → 650 行)
+### 5.4 绘本馆 (`/picture-books` → ~420 行)
 
-- 书架 → 阅读器，音频逐字高亮，自动翻页
-- RequireAuth 守卫
-- 目前 1 本书：《小白兔找萝卜》
+**正在重构中（v2 — 点读笔交互模式）**
+
+- **书架**：封面大图卡片 + 年龄标签 + 页数，用 `next/image` 加载封面
+- **阅读器**：两页对开展示（桌面/平板），手机竖屏退回单页
+- **点读交互**：点击文字区域 → 整页朗读 + 字级高亮（类似点读笔）
+- **生词**：阅读中不做内联标记，绘本最后一页统一展示生词汇总表
+- **自动播放**：保留，header 按钮触发，连续朗读全书
+- **控制栏**：已简化，去掉播放/暂停大按钮，只保留翻页 + 页码 + 自动播放
+- RequireAuth 守卫（**当前临时跳过，待测试完成后恢复**）
+- 目前 1 本书：《小白兔找萝卜》，使用 SVG 占位插图
+
+**book.json 数据格式（v2）：**
+```typescript
+interface BookPage {
+  text: string;
+  subtitle?: string;
+  image?: string;           // 插图路径（SVG 占位图，后续替换为 AI 生成插图）
+  layout?: "image-top" | "image-full" | "text-only" | "vocab-summary";
+  audio: string;
+  words: WordBoundary[];    // 字级时间轴，用于点读高亮
+  emoji?: string;           // fallback（无 image 时使用）
+  bg?: string;              // fallback 渐变色
+}
+// 最后一页 layout: "vocab-summary" 汇总全书生词
+```
+
+**组件结构：**
+```
+PictureBooksInner → BookShelf | BookReader
+  BookReader → SpreadView (桌面两页对开) | SinglePage (手机单页)
+    PagePanel (单页渲染：插图背景 + 可点击文字浮层)
+    HighlightedText (字级高亮)
+    VocabSummaryPanel (生词汇总页)
+```
+
+**待完成事项：**
+- [ ] 浏览器端视觉验证（代码已写完，服务端确认提供新代码，但浏览器缓存问题待排查）
+- [ ] 恢复 RequireAuth 登录守卫
+- [ ] 用真实 AI 插图替换 SVG 占位图
+- [ ] 绘本生产 pipeline 设计（多 agent 协作）
 
 ### 5.5 地产权思维导图 (`/property-law` → 387 行)
 
@@ -247,9 +333,9 @@ interface CharItem { char, readings: CharReading[], groupId, explain? }
 interface CharReading { pinyin, words: string[], emoji }
 interface CharGroup { id, name, chars: CharItem[] }
 
-// chinese-literacy (内联在 page.tsx)
+// chinese-literacy (lib/types.ts)
 interface CharRecord { right, wrong, lastSeen, nextReview, interval }
-// interval 现在是 level (0~5)，不再是天数
+// interval 是 level (0~5)，答错降 2 级（柔性衰减）
 
 // src/lib/auth-context.tsx
 interface AuthContextValue {
@@ -352,8 +438,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...（anon public key）
 
 ### 8.5 已知的技术债/改进空间
 
-- `chinese-literacy/page.tsx` 有 2133 行，可考虑拆分
-- 绘本馆只有 1 本书
+- ~~`chinese-literacy/page.tsx` 有 2133 行，可考虑拆分~~ ✅ 已拆分为 18 个模块文件
+- 绘本馆只有 1 本书，使用 SVG 占位插图，待替换为 AI 生成插图
+- 绘本馆 RequireAuth 临时跳过（搜索 `TODO: restore RequireAuth`）
 - `game_stats` 排行榜表已建好但功能未实现（Phase 3）
 - 无单元测试 / E2E 测试
 - 无 CI/CD 配置
@@ -392,10 +479,14 @@ f708637 feat: 统一抽象字语音为预录音频，翻页停止播放
 | Supabase 客户端配置 | `src/lib/supabase.ts`（懒初始化 Proxy）+ `.env.local` |
 | 修改全局样式/字体 | `src/app/globals.css` + `src/app/layout.tsx` |
 | 添加/修改汉字数据 | `src/data/characters.ts` |
-| 修改识字学习/测验逻辑 | `src/app/chinese-literacy/page.tsx` |
-| 修改智能出题算法 | 同上，搜索 `generateQuiz` 函数 |
-| 修改遗忘曲线算法 | 同上，搜索 `recordAnswerLocal` 和 `EBBINGHAUS_INTERVALS` |
-| 修改易错字表 | 同上，搜索 `WrongList` 组件 |
+| 修改识字学习/测验逻辑 | `src/app/chinese-literacy/page.tsx` (模式路由) + `components/` |
+| 修改智能出题算法 | `src/app/chinese-literacy/lib/quiz-engine.ts`，搜索 `generateQuiz` |
+| 修改遗忘曲线算法 | `src/app/chinese-literacy/lib/spaced-repetition.ts` |
+| 修改易错字表 | `src/app/chinese-literacy/components/WrongList.tsx` |
+| 修改语音/TTS 系统 | `src/app/chinese-literacy/lib/voice.ts` |
+| 修改音效 | `src/app/chinese-literacy/lib/sound-effects.ts` |
+| 修改识字数据持久化 | `src/app/chinese-literacy/lib/supabase-progress.ts` |
+| 修改识字共享类型 | `src/app/chinese-literacy/lib/types.ts` |
 | 修改绘本功能 | `src/app/picture-books/page.tsx` |
 | 修改思维导图 | `src/app/property-law/page.tsx` |
 | 新增游戏数据表 | Supabase SQL Editor，参考 `literacy_records` 表结构 |
@@ -410,5 +501,8 @@ f708637 feat: 统一抽象字语音为预录音频，翻页停止播放
 |------|------|------|
 | Phase 1 | 用户系统 (Supabase Auth + DB) | ✅ 已完成 |
 | Phase 2 | 智能出题 + 遗忘曲线 + 易错字表 | ✅ 已完成 |
+| Phase 2.7 | 识字模块优化 — 防作弊出题算法 + 模块化拆分 | ✅ 已完成 |
+| Phase 2.5 | 绘本馆 v2 — 点读笔交互 + 对开布局 | 🔧 开发中（代码已写完，待浏览器验证） |
+| Phase 2.6 | 绘本生产 Pipeline — 多 agent 故事生成 + AI 插图 + TTS 配音 | 📋 已设计，待实施 |
 | Phase 3 | 排行榜 (打卡天数/掌握数量/正确率，周榜/月榜/总榜) | 📋 待开发，`game_stats` 表已预留 |
 | Phase 4+ | 数学游戏、阅读游戏等新模块 | 📋 规划中 |
