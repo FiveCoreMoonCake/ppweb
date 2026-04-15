@@ -5,13 +5,30 @@ import { EBBINGHAUS_INTERVALS } from "./spaced-repetition";
 import { todayStr } from "./supabase-progress";
 
 /**
+ * Sort entries by spaced-repetition level ascending, shuffle within each level.
+ * Lower level = struggling more = higher priority within the bucket.
+ */
+function shuffleByLevel(entries: PoolEntry[], recs: Record<string, CharRecord>): PoolEntry[] {
+  const byLevel = new Map<number, PoolEntry[]>();
+  for (const e of entries) {
+    const lv = recs[e.item.char]?.interval ?? 0;
+    if (!byLevel.has(lv)) byLevel.set(lv, []);
+    byLevel.get(lv)!.push(e);
+  }
+  return [...byLevel.keys()]
+    .sort((a, b) => a - b)
+    .flatMap((lv) => shuffle(byLevel.get(lv)!));
+}
+
+/**
  * Generate quiz questions with anti-gaming priority allocation.
  *
- * New priority order (prevents child from gaming by deliberately answering wrong):
+ * Priority order (prevents child from gaming by deliberately answering wrong):
  *   1. New chars (40%): learned but never quizzed — top priority, child cannot avoid
  *   2. Due for review (25%): spaced repetition schedule
- *   3. Easy-wrong (25%): accuracy < 50%, attempts >= 3, AND level < 3
- *      (level >= 3 means child recently proved mastery — graduates out)
+ *   3. Easy-wrong (25%): accuracy < 50%, attempts >= 3
+ *      Sorted by level ascending within bucket — level 0 (struggling) picked first,
+ *      level 3+ (recovering) only fills remaining slots. No hard cutoff.
  *   4. Rest (10%): background maintenance
  *
  * @param progress Set of learned characters (from literacy_progress)
@@ -32,7 +49,7 @@ export function generateQuiz(
     item.readings.map((_, ri) => ({ item, readingIdx: ri }))
   );
 
-  // Categorize with new anti-gaming priorities
+  // Categorize with anti-gaming priorities
   const newChars: PoolEntry[] = [];
   const dueForReview: PoolEntry[] = [];
   const easyWrong: PoolEntry[] = [];
@@ -46,7 +63,7 @@ export function generateQuiz(
     } else {
       const total = rec.right + rec.wrong;
       const accuracy = total > 0 ? rec.right / total : 1;
-      const isEasyWrong = accuracy < 0.5 && total >= 3 && rec.interval < 3;
+      const isEasyWrong = accuracy < 0.5 && total >= 3;
       const isDue = rec.nextReview <= today;
       const isMastered = rec.interval >= EBBINGHAUS_INTERVALS.length - 1;
 
@@ -64,11 +81,13 @@ export function generateQuiz(
   }
 
   // Fix A: Use Math.floor + remainder to prevent rounding overshoot
+  // Easy-wrong bucket sorted by level: struggling chars (low level) first,
+  // recovering chars (high level) deprioritized but still present
   const targets = [
-    { bucket: shuffle(newChars),      pct: 0.4 },
-    { bucket: shuffle(dueForReview),  pct: 0.25 },
-    { bucket: shuffle(easyWrong),     pct: 0.25 },
-    { bucket: shuffle(rest),          pct: 0.1 },
+    { bucket: shuffle(newChars),                  pct: 0.4 },
+    { bucket: shuffleByLevel(dueForReview, records), pct: 0.25 },
+    { bucket: shuffleByLevel(easyWrong, records),    pct: 0.25 },
+    { bucket: shuffle(rest),                      pct: 0.1 },
   ];
 
   const allocations = targets.map((t, i, arr) => {
