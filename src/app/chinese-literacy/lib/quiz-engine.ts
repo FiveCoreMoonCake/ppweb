@@ -34,14 +34,20 @@ function shuffleByLevel(entries: PoolEntry[], recs: Record<string, CharRecord>):
  * @param progress Set of learned characters (from literacy_progress)
  * @param count Number of questions to generate
  * @param records Spaced repetition records
+ * @param groupIds Optional: if provided, use chars from these groups (by-group mode);
+ *                 if omitted, use all learned chars from progress (all-learned mode)
  */
 export function generateQuiz(
   progress: Set<string>,
   count: number,
   records: Record<string, CharRecord>,
+  groupIds?: string[],
 ): QuizQuestion[] {
-  // Only include characters the user has learned
-  const chars = allChars.filter((c) => progress.has(c.char));
+  // Determine the character pool based on range mode
+  const chars = groupIds
+    ? allChars.filter((c) => groupIds.includes(c.groupId))
+    : allChars.filter((c) => progress.has(c.char));
+
   const today = todayStr();
 
   // Expand: each reading of each char is a separate pool entry
@@ -81,8 +87,6 @@ export function generateQuiz(
   }
 
   // Fix A: Use Math.floor + remainder to prevent rounding overshoot
-  // Easy-wrong bucket sorted by level: struggling chars (low level) first,
-  // recovering chars (high level) deprioritized but still present
   const targets = [
     { bucket: shuffle(newChars),                  pct: 0.4 },
     { bucket: shuffleByLevel(dueForReview, records), pct: 0.25 },

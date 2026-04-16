@@ -36,6 +36,7 @@ function ChineseLiteracyInner() {
   const [quizAnswers, setQuizAnswers] = useState<QuizAnswer[]>([]);
   const [quizRound, setQuizRound] = useState(0);
   const [lastQuizCount, setLastQuizCount] = useState(10);
+  const [lastQuizGroupIds, setLastQuizGroupIds] = useState<string[] | undefined>(undefined);
 
   // Listen quiz state
   const [listenResult, setListenResult] = useState<ListenQuizResult | null>(null);
@@ -62,18 +63,19 @@ function ChineseLiteracyInner() {
     return () => { cancelled = true; };
   }, [userId]);
 
-  const startQuiz = useCallback((count: number) => {
-    const questions = generateQuiz(progress, count, records);
+  const startQuiz = useCallback((count: number, groupIds?: string[]) => {
+    const questions = generateQuiz(progress, count, records, groupIds);
     setQuizQuestions(questions);
     setQuizAnswers([]);
     setQuizRound((r) => r + 1);
     setLastQuizCount(count);
+    setLastQuizGroupIds(groupIds);
     setMode("quiz-play");
   }, [progress, records]);
 
   const retryQuiz = useCallback(() => {
-    startQuiz(lastQuizCount);
-  }, [lastQuizCount, startQuiz]);
+    startQuiz(lastQuizCount, lastQuizGroupIds);
+  }, [lastQuizCount, lastQuizGroupIds, startQuiz]);
 
   const startListenQuiz = useCallback(() => {
     setListenResult(null);
@@ -126,7 +128,6 @@ function ChineseLiteracyInner() {
         onBack={() => setMode("home")}
         onStartPractice={(wrongItems) => {
           const wrongCharSet = new Set(wrongItems.map((c) => c.char));
-          // Generate from learned chars, then filter to only wrong chars
           const questions = generateQuiz(progress, Math.min(wrongItems.length, 20), records);
           const filtered = questions.filter((q) => wrongCharSet.has(q.correct.char));
           const finalQuestions = filtered.length >= 4 ? filtered : questions.slice(0, Math.min(wrongItems.length, 20));
@@ -134,6 +135,7 @@ function ChineseLiteracyInner() {
           setQuizAnswers([]);
           setQuizRound((r) => r + 1);
           setLastQuizCount(finalQuestions.length);
+          setLastQuizGroupIds(undefined);
           setMode("quiz-play");
         }}
       />
