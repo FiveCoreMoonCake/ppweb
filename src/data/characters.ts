@@ -93,6 +93,8 @@ const p3: CharItem[] = [
     { pinyin: "zhǎng", words: ["长大", "成长"], emoji: "📈" },
   ], groupId: "p3" },
   { char: "方", readings: [{ pinyin: "fāng", words: ["方向", "方形"], emoji: "⬜" }], groupId: "p3" },
+  { char: "又", readings: [{ pinyin: "yòu", words: ["又大", "又来"], emoji: "🔄" }], groupId: "p3" },
+  { char: "不", readings: [{ pinyin: "bù", words: ["不好", "不行"], emoji: "🚫" }], groupId: "p3" },
 ];
 
 const p4: CharItem[] = [
@@ -116,12 +118,12 @@ const p4: CharItem[] = [
   { char: "弟", readings: [{ pinyin: "dì", words: ["弟弟", "兄弟"], emoji: "👦" }], groupId: "p4" },
   { char: "妹", readings: [{ pinyin: "mèi", words: ["妹妹", "姐妹"], emoji: "👧" }], groupId: "p4" },
   { char: "我", readings: [{ pinyin: "wǒ", words: ["我们", "我的"], emoji: "🙋" }], groupId: "p4" },
+  { char: "你", readings: [{ pinyin: "nǐ", words: ["你好", "你们"], emoji: "🫵" }], groupId: "p4" },
+  { char: "他", readings: [{ pinyin: "tā", words: ["他们", "他的"], emoji: "👤" }], groupId: "p4" },
+  { char: "她", readings: [{ pinyin: "tā", words: ["她们", "她的"], emoji: "👩" }], groupId: "p4" },
 ];
 
 const p5: CharItem[] = [
-  { char: "你", readings: [{ pinyin: "nǐ", words: ["你好", "你们"], emoji: "🫵" }], groupId: "p5" },
-  { char: "他", readings: [{ pinyin: "tā", words: ["他们", "他的"], emoji: "👤" }], groupId: "p5" },
-  { char: "她", readings: [{ pinyin: "tā", words: ["她们", "她的"], emoji: "👩" }], groupId: "p5" },
   { char: "儿", readings: [{ pinyin: "ér", words: ["儿子", "女儿"], emoji: "👶" }], groupId: "p5" },
   { char: "了", readings: [
     { pinyin: "le", words: ["好了", "来了"], emoji: "✅" },
@@ -132,8 +134,6 @@ const p5: CharItem[] = [
     { pinyin: "zi", words: ["桌子", "椅子"], emoji: "🪑" },
   ], groupId: "p5" },
   { char: "女", readings: [{ pinyin: "nǚ", words: ["女儿", "女生"], emoji: "👧" }], groupId: "p5" },
-  { char: "又", readings: [{ pinyin: "yòu", words: ["又大", "又来"], emoji: "🔄" }], groupId: "p5" },
-  { char: "不", readings: [{ pinyin: "bù", words: ["不好", "不行"], emoji: "🚫" }], groupId: "p5" },
   { char: "左", readings: [{ pinyin: "zuǒ", words: ["左右", "左手"], emoji: "⬅️" }], groupId: "p5" },
   { char: "右", readings: [{ pinyin: "yòu", words: ["左右", "右手"], emoji: "➡️" }], groupId: "p5" },
   { char: "前", readings: [{ pinyin: "qián", words: ["前面", "以前"], emoji: "🔜" }], groupId: "p5" },
@@ -200,6 +200,8 @@ const p7: CharItem[] = [
   { char: "肉", readings: [{ pinyin: "ròu", words: ["牛肉", "鸡肉"], emoji: "🥩" }], groupId: "p7" },
   { char: "蛋", readings: [{ pinyin: "dàn", words: ["鸡蛋", "蛋糕"], emoji: "🥚" }], groupId: "p7" },
   { char: "奶", readings: [{ pinyin: "nǎi", words: ["牛奶", "奶奶"], emoji: "🥛" }], groupId: "p7" },
+  { char: "吗", readings: [{ pinyin: "ma", words: ["好吗", "是吗"], emoji: "❓" }], groupId: "p7" },
+  { char: "呢", readings: [{ pinyin: "ne", words: ["你呢", "哪呢"], emoji: "🤷" }], groupId: "p7" },
 ];
 
 const p8: CharItem[] = [
@@ -249,6 +251,10 @@ const p9: CharItem[] = [
   { char: "近", readings: [{ pinyin: "jìn", words: ["远近", "附近"], emoji: "📍" }], groupId: "p9" },
   { char: "快", readings: [{ pinyin: "kuài", words: ["快乐", "快速"], emoji: "🚀" }], groupId: "p9" },
   { char: "慢", readings: [{ pinyin: "màn", words: ["慢慢", "快慢"], emoji: "🐌" }], groupId: "p9" },
+  { char: "也", readings: [{ pinyin: "yě", words: ["也是", "也好"], emoji: "➕" }], groupId: "p9" },
+  { char: "啊", readings: [{ pinyin: "a", words: ["是啊", "好啊"], emoji: "😮" }], groupId: "p9" },
+  { char: "喜", readings: [{ pinyin: "xǐ", words: ["喜欢", "欢喜"], emoji: "😊" }], groupId: "p9" },
+  { char: "欢", readings: [{ pinyin: "huān", words: ["欢乐", "喜欢"], emoji: "🎉" }], groupId: "p9" },
 ];
 
 const p10: CharItem[] = [
@@ -275,6 +281,7 @@ const p10: CharItem[] = [
   { char: "旧", readings: [{ pinyin: "jiù", words: ["旧的", "新旧"], emoji: "📜" }], groupId: "p10" },
   { char: "真", readings: [{ pinyin: "zhēn", words: ["真的", "认真"], emoji: "💯" }], groupId: "p10", explain: "真的真，这糖是真的还是假的？真的能吃" },
   { char: "假", readings: [{ pinyin: "jiǎ", words: ["真假", "放假"], emoji: "❌" }], groupId: "p10", explain: "假的假，这花是假的，不是真长出来的" },
+  { char: "和", readings: [{ pinyin: "hé", words: ["你和我", "和平"], emoji: "🤝" }], groupId: "p10" },
 ];
 
 const p11: CharItem[] = [
@@ -283,12 +290,7 @@ const p11: CharItem[] = [
   { char: "有", readings: [{ pinyin: "yǒu", words: ["有的", "没有"], emoji: "🔶" }], groupId: "p11" },
   { char: "在", readings: [{ pinyin: "zài", words: ["现在", "在家"], emoji: "📍" }], groupId: "p11" },
   { char: "是", readings: [{ pinyin: "shì", words: ["不是", "是的"], emoji: "⭕" }], groupId: "p11" },
-  { char: "也", readings: [{ pinyin: "yě", words: ["也是", "也好"], emoji: "➕" }], groupId: "p11" },
-  { char: "吗", readings: [{ pinyin: "ma", words: ["好吗", "是吗"], emoji: "❓" }], groupId: "p11" },
-  { char: "呢", readings: [{ pinyin: "ne", words: ["你呢", "哪呢"], emoji: "🤷" }], groupId: "p11" },
   { char: "吧", readings: [{ pinyin: "ba", words: ["好吧", "走吧"], emoji: "💭" }], groupId: "p11" },
-  { char: "啊", readings: [{ pinyin: "a", words: ["是啊", "好啊"], emoji: "😮" }], groupId: "p11" },
-  { char: "和", readings: [{ pinyin: "hé", words: ["你和我", "和平"], emoji: "🤝" }], groupId: "p11" },
   { char: "跟", readings: [{ pinyin: "gēn", words: ["跟着", "跟上"], emoji: "👣" }], groupId: "p11" },
   { char: "从", readings: [{ pinyin: "cóng", words: ["从前", "从来"], emoji: "▶️" }], groupId: "p11" },
   { char: "到", readings: [{ pinyin: "dào", words: ["到达", "来到"], emoji: "🎯" }], groupId: "p11" },
@@ -306,15 +308,11 @@ const p12: CharItem[] = [
   { char: "才", readings: [{ pinyin: "cái", words: ["才能", "刚才"], emoji: "💡" }], groupId: "p12" },
   { char: "刚", readings: [{ pinyin: "gāng", words: ["刚才", "刚刚"], emoji: "⏱️" }], groupId: "p12" },
   { char: "要", readings: [{ pinyin: "yào", words: ["要求", "重要"], emoji: "❗" }], groupId: "p12" },
-  { char: "会", readings: [{ pinyin: "huì", words: ["开会", "学会"], emoji: "🎓" }], groupId: "p12" },
-  { char: "能", readings: [{ pinyin: "néng", words: ["能力", "才能"], emoji: "💪" }], groupId: "p12" },
   { char: "可", readings: [{ pinyin: "kě", words: ["可以", "可爱"], emoji: "🆗" }], groupId: "p12" },
   { char: "以", readings: [{ pinyin: "yǐ", words: ["可以", "以后"], emoji: "➡️" }], groupId: "p12" },
   { char: "想", readings: [{ pinyin: "xiǎng", words: ["想法", "思想"], emoji: "💭" }], groupId: "p12" },
   { char: "意", readings: [{ pinyin: "yì", words: ["意思", "注意"], emoji: "💡" }], groupId: "p12", explain: "意思的意，你什么意思？意就是心里想的" },
   { char: "愿", readings: [{ pinyin: "yuàn", words: ["愿意", "心愿"], emoji: "🌠" }], groupId: "p12", explain: "愿意的愿，我愿意！就是心里想这么做" },
-  { char: "喜", readings: [{ pinyin: "xǐ", words: ["喜欢", "欢喜"], emoji: "😊" }], groupId: "p12" },
-  { char: "欢", readings: [{ pinyin: "huān", words: ["欢乐", "喜欢"], emoji: "🎉" }], groupId: "p12" },
   { char: "知", readings: [{ pinyin: "zhī", words: ["知道", "知识"], emoji: "🧠" }], groupId: "p12" },
   { char: "道", readings: [{ pinyin: "dào", words: ["知道", "道路"], emoji: "🛤️" }], groupId: "p12", explain: "知道的道，你知道吗？知道！道就是明白了" },
   { char: "记", readings: [{ pinyin: "jì", words: ["记住", "日记"], emoji: "📝" }], groupId: "p12" },
@@ -350,6 +348,8 @@ const p13: CharItem[] = [
   ], groupId: "p13" },
   { char: "脸", readings: [{ pinyin: "liǎn", words: ["脸上", "洗脸"], emoji: "😊" }], groupId: "p13" },
   { char: "刷", readings: [{ pinyin: "shuā", words: ["刷牙", "刷子"], emoji: "🪥" }], groupId: "p13" },
+  { char: "会", readings: [{ pinyin: "huì", words: ["开会", "学会"], emoji: "🎓" }], groupId: "p13" },
+  { char: "能", readings: [{ pinyin: "néng", words: ["能力", "才能"], emoji: "💪" }], groupId: "p13" },
 ];
 
 const p14: CharItem[] = [
@@ -663,31 +663,31 @@ const p25: CharItem[] = [
 ];
 
 export const charGroups: CharGroup[] = [
-  { id: "p1", name: "第1期", chars: p1 },
-  { id: "p2", name: "第2期", chars: p2 },
-  { id: "p3", name: "第3期", chars: p3 },
-  { id: "p4", name: "第4期", chars: p4 },
-  { id: "p5", name: "第5期", chars: p5 },
-  { id: "p6", name: "第6期", chars: p6 },
-  { id: "p7", name: "第7期", chars: p7 },
-  { id: "p8", name: "第8期", chars: p8 },
-  { id: "p9", name: "第9期", chars: p9 },
-  { id: "p10", name: "第10期", chars: p10 },
-  { id: "p11", name: "第11期", chars: p11 },
-  { id: "p12", name: "第12期", chars: p12 },
-  { id: "p13", name: "第13期", chars: p13 },
-  { id: "p14", name: "第14期", chars: p14 },
-  { id: "p15", name: "第15期", chars: p15 },
-  { id: "p16", name: "第16期", chars: p16 },
-  { id: "p17", name: "第17期", chars: p17 },
-  { id: "p18", name: "第18期", chars: p18 },
-  { id: "p19", name: "第19期", chars: p19 },
-  { id: "p20", name: "第20期", chars: p20 },
-  { id: "p21", name: "第21期", chars: p21 },
-  { id: "p22", name: "第22期", chars: p22 },
-  { id: "p23", name: "第23期", chars: p23 },
-  { id: "p24", name: "第24期", chars: p24 },
-  { id: "p25", name: "第25期", chars: p25 },
+  { id: "p1", name: "数字与自然", chars: p1 },
+  { id: "p2", name: "身体与动作", chars: p2 },
+  { id: "p3", name: "动物与常用", chars: p3 },
+  { id: "p4", name: "时间与家人", chars: p4 },
+  { id: "p5", name: "方位与学校", chars: p5 },
+  { id: "p6", name: "文具与数量", chars: p6 },
+  { id: "p7", name: "食物与味道", chars: p7 },
+  { id: "p8", name: "穿戴与动作", chars: p8 },
+  { id: "p9", name: "感官与情感", chars: p9 },
+  { id: "p10", name: "颜色与性质", chars: p10 },
+  { id: "p11", name: "常用虚词", chars: p11 },
+  { id: "p12", name: "思维与认知", chars: p12 },
+  { id: "p13", name: "日常动作", chars: p13 },
+  { id: "p14", name: "身体与健康", chars: p14 },
+  { id: "p15", name: "自然与天气", chars: p15 },
+  { id: "p16", name: "植物与花园", chars: p16 },
+  { id: "p17", name: "地方与建筑", chars: p17 },
+  { id: "p18", name: "交通与出行", chars: p18 },
+  { id: "p19", name: "节日与文化", chars: p19 },
+  { id: "p20", name: "社会与生活", chars: p20 },
+  { id: "p21", name: "情绪与性格", chars: p21 },
+  { id: "p22", name: "学习与成长", chars: p22 },
+  { id: "p23", name: "时间与季节", chars: p23 },
+  { id: "p24", name: "动作与状态", chars: p24 },
+  { id: "p25", name: "动物与活动", chars: p25 },
 ];
 
 export const allChars: CharItem[] = charGroups.flatMap((g) => g.chars);

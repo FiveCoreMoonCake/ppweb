@@ -3,6 +3,7 @@ import type { CharRecord, QuizQuestion, PoolEntry, WrongCharEntry } from "./type
 import { shuffle } from "./shuffle";
 import { EBBINGHAUS_INTERVALS } from "./spaced-repetition";
 import { todayStr } from "./supabase-progress";
+import { getConfusableChars } from "./confusables";
 
 /**
  * Sort entries by spaced-repetition level ascending, shuffle within each level.
@@ -132,13 +133,19 @@ export function generateQuiz(
     }
   }
 
-  // Fix B: Prefer same-group distractors, with global fallback
+  // Fix B: Prefer confusable chars > same-group > other-group distractors, with global fallback
   const questions = picked.map((entry) => {
-    const sameGroup = shuffle(chars.filter((c) => c.char !== entry.item.char && c.groupId === entry.item.groupId));
-    const otherGroup = shuffle(chars.filter((c) => c.char !== entry.item.char && c.groupId !== entry.item.groupId));
+    const confusableCharNames = getConfusableChars(entry.item.char);
+    const confusables = shuffle(chars.filter((c) => confusableCharNames.includes(c.char)));
+    const sameGroup = shuffle(chars.filter((c) => c.char !== entry.item.char && c.groupId === entry.item.groupId && !confusableCharNames.includes(c.char)));
+    const otherGroup = shuffle(chars.filter((c) => c.char !== entry.item.char && c.groupId !== entry.item.groupId && !confusableCharNames.includes(c.char)));
 
     const distractors: CharItem[] = [];
+    // Priority 1: confusable characters (hardest distractors)
+    for (const c of confusables) { if (distractors.length >= 3) break; distractors.push(c); }
+    // Priority 2: same group
     for (const c of sameGroup) { if (distractors.length >= 3) break; distractors.push(c); }
+    // Priority 3: other groups
     for (const c of otherGroup) { if (distractors.length >= 3) break; distractors.push(c); }
 
     // Global fallback if selected range is too small

@@ -6,13 +6,16 @@ import { ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import { charGroups } from "@/data/characters";
 import { stopAll } from "../lib/voice";
 import { loadProgressFromDB, saveProgressChar } from "../lib/supabase-progress";
+import { getConfusablePairs } from "../lib/confusables";
 import { CharCard } from "./CharCard";
+import { CompareCard } from "./CompareCard";
 
 export function LearnMode({ onBack, userId }: { onBack: () => void; userId: string }) {
   const [groupIdx, setGroupIdx] = useState(0);
   const [cardIdx, setCardIdx] = useState(0);
   const [learned, setLearned] = useState<Set<string>>(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showCompare, setShowCompare] = useState(false);
 
   useEffect(() => {
     loadProgressFromDB(userId).then(setLearned);
@@ -33,9 +36,10 @@ export function LearnMode({ onBack, userId }: { onBack: () => void; userId: stri
     });
   }, [card, userId]);
 
-  const prev = () => { stopAll(); setCardIdx((i) => Math.max(0, i - 1)); };
+  const prev = () => { stopAll(); setShowCompare(false); setCardIdx((i) => Math.max(0, i - 1)); };
   const next = () => {
     stopAll();
+    setShowCompare(false);
     if (cardIdx < group.chars.length - 1) {
       setCardIdx((i) => i + 1);
     } else if (groupIdx < charGroups.length - 1) {
@@ -43,7 +47,10 @@ export function LearnMode({ onBack, userId }: { onBack: () => void; userId: stri
       setCardIdx(0);
     }
   };
-  const selectGroup = (i: number) => { stopAll(); setGroupIdx(i); setCardIdx(0); setSidebarOpen(false); };
+  const selectGroup = (i: number) => { stopAll(); setShowCompare(false); setGroupIdx(i); setCardIdx(0); setSidebarOpen(false); };
+
+  const confusablePairsForCard = getConfusablePairs(card.char);
+  const hasConfusables = confusablePairsForCard.length > 0;
 
   const learnedInGroup = group.chars.filter((c) => learned.has(c.char)).length;
   const isLastCard = cardIdx === group.chars.length - 1;
@@ -159,16 +166,33 @@ export function LearnMode({ onBack, userId }: { onBack: () => void; userId: stri
 
           <AnimatePresence mode="wait">
             <motion.div
-              key={`${group.id}-${cardIdx}`}
+              key={`${group.id}-${cardIdx}-${showCompare ? 'cmp' : 'card'}`}
               initial={{ opacity: 0, x: 40 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -40 }}
               transition={{ duration: 0.2 }}
-              className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 sm:p-10 w-full max-w-[400px]"
+              className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 sm:p-10 w-full max-w-[440px]"
             >
-              <CharCard item={card} />
+              {showCompare ? (
+                <div className="flex flex-col gap-4">
+                  {confusablePairsForCard.map((pair, i) => (
+                    <CompareCard key={i} pair={pair} />
+                  ))}
+                </div>
+              ) : (
+                <CharCard item={card} />
+              )}
             </motion.div>
           </AnimatePresence>
+
+          {hasConfusables && (
+            <button
+              onClick={() => setShowCompare(!showCompare)}
+              className="mt-3 px-4 py-2 rounded-xl bg-amber-100 text-amber-800 text-sm font-bold hover:bg-amber-200 active:scale-95 transition-all"
+            >
+              {showCompare ? "🔙 返回字卡" : `🔍 易混字对比 (${confusablePairsForCard.length})`}
+            </button>
+          )}
 
           <div className="flex items-center gap-6 mt-5">
             <button
