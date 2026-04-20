@@ -194,3 +194,48 @@ export function useVoiceInit() {
     return () => window.speechSynthesis.removeEventListener("voiceschanged", handler);
   }, []);
 }
+
+/* ── Word pair audio ── */
+
+/**
+ * Speak a word pair's word (e.g., "喜欢").
+ * Looks up "wp_喜欢" in manifest, falls back to TTS.
+ */
+export async function speakWord(word: string) {
+  stopAll();
+  const myId = _abortId;
+  const pre = playPrerecorded(`wp_${word}`);
+  if (pre) {
+    await pre;
+  } else {
+    await wait(100, myId);
+    if (myId !== _abortId) return;
+    await speakAndWait(word, myId);
+  }
+}
+
+/**
+ * Speak a character in the context of its word pair.
+ * Pattern: "喜，喜欢的喜。欢喜的喜。表示开心热爱的意思"
+ * Looks up "{char}_in_{word}" in manifest, falls back to TTS.
+ */
+export async function speakCharInWord(
+  char: string,
+  word: string,
+  phrases: string[],
+  meaning: string,
+) {
+  stopAll();
+  const myId = _abortId;
+  const pre = playPrerecorded(`${char}_in_${word}`);
+  if (pre) {
+    await pre;
+  } else {
+    // TTS fallback: "字，X的字。Y的字。释义"
+    const phrasePart = phrases.map((p) => `${p}`).join("。");
+    const text = `${char}，，${phrasePart}。，${meaning}`;
+    await wait(100, myId);
+    if (myId !== _abortId) return;
+    await speakAndWait(text, myId);
+  }
+}

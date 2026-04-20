@@ -55,19 +55,23 @@ ppweb/
 │   │   │   │   ├── types.ts          # 共享类型定义 (CharRecord, QuizQuestion 等)
 │   │   │   │   ├── shuffle.ts        # Fisher-Yates 洗牌工具
 │   │   │   │   ├── voice.ts          # TTS/语音系统 (预录音频 + 浏览器 TTS)
+│   │   │   │   ├── confusables.ts    # 易混字对比数据 (35组)
+│   │   │   │   ├── word-pairs.ts     # 搭配词学习数据 (25+组)
 │   │   │   │   ├── supabase-progress.ts # Supabase 数据持久化 (进度 + 学习记录)
 │   │   │   │   ├── spaced-repetition.ts # 遗忘曲线算法 (Ebbinghaus 间隔)
 │   │   │   │   ├── sound-effects.ts  # 音效 (答对/答错/胜利)
-│   │   │   │   └── quiz-engine.ts    # 智能出题引擎 (防作弊 + 干扰项 + 去重)
+│   │   │   │   └── quiz-engine.ts    # 智能出题引擎 (防作弊 + 易混字干扰项 + 去重)
 │   │   │   └── components/
 │   │   │       ├── CharCard.tsx       # 字卡组件 (PixelEmoji + 朗读按钮)
-│   │   │       ├── LearnMode.tsx      # 学习模式 (翻卡 + 分组导航)
+│   │   │       ├── CompareCard.tsx    # 易混字对比卡 (并排对比 + 记忆提示)
+│   │   │       ├── WordPairCard.tsx   # 搭配词卡 (词+双字卡 + 点击读详细)
+│   │   │       ├── LearnMode.tsx      # 学习模式 (翻卡 + 分组导航 + 搭配词/易混字)
 │   │   │       ├── QuizSettings.tsx   # 测验设置 (题目数量选择)
 │   │   │       ├── QuizPlay.tsx       # 测验答题 (2×2 选项 + 反馈)
 │   │   │       ├── QuizResults.tsx    # 测验结果 (复习 + 总结)
-│   │   │       ├── ListenQuizSettings.tsx # 听音选字设置
-│   │   │       ├── ListenQuizPlay.tsx # 听音选字 3×3 游戏
-│   │   │       ├── ListenQuizResults.tsx # 听音选字结果
+│   │   │       ├── ListenQuizSettings.tsx # 九格顺选设置
+│   │   │       ├── ListenQuizPlay.tsx # 九格顺选 3×3 游戏
+│   │   │       ├── ListenQuizResults.tsx # 九格顺选结果
 │   │   │       └── WrongList.tsx      # 易错字表 + 专项练习
 │   │   ├── picture-books/
 │   │   │   └── page.tsx              # 绘本馆 (650 行)
@@ -86,9 +90,11 @@ ppweb/
 │   │   └── tools.ts                  # 工具注册表 (48 行)
 │   └── mdx-components.tsx            # MDX 组件映射
 ├── public/                           # 静态资源
-│   ├── audio/                        # 汉字发音 MP3 (528 个文件)
-│   │   ├── manifest.json             # 字 → MP3 路径映射表
-│   │   └── *.mp3                     # 单字发音 + 多音字特定读音
+│   ├── audio/                        # 汉字发音 MP3 (528+ 个文件)
+│   │   ├── manifest.json             # 字/词 → MP3 路径映射表
+│   │   ├── *.mp3                     # 单字发音 + 多音字特定读音
+│   │   ├── wp_*.mp3                  # 搭配词整词发音 (如 wp_喜欢.mp3)
+│   │   └── *_in_*.mp3                # 字在词中的详细读音 (如 喜_in_喜欢.mp3)
 │   └── books/                        # 绘本数据
 │       └── rabbit-carrot/            # 《小白兔找萝卜》(book.json + p1~p10.mp3)
 ├── scripts/                          # 构建/数据生成脚本 (Python + Node.js)
@@ -199,13 +205,15 @@ chinese-literacy/
 │   └── quiz-engine.ts        # 智能出题引擎
 └── components/               # UI 组件层
     ├── CharCard.tsx           # 字卡 (共享)
-    ├── LearnMode.tsx          # 学习模式
+    ├── CompareCard.tsx        # 易混字对比卡
+    ├── WordPairCard.tsx       # 搭配词卡 (词+双字卡)
+    ├── LearnMode.tsx          # 学习模式 (+搭配词/易混字集成)
     ├── QuizSettings.tsx       # 测验设置
     ├── QuizPlay.tsx           # 测验答题
     ├── QuizResults.tsx        # 测验结果
-    ├── ListenQuizSettings.tsx # 听音选字设置
-    ├── ListenQuizPlay.tsx     # 听音选字游戏
-    ├── ListenQuizResults.tsx  # 听音选字结果
+    ├── ListenQuizSettings.tsx # 九格顺选设置
+    ├── ListenQuizPlay.tsx     # 九格顺选游戏
+    ├── ListenQuizResults.tsx  # 九格顺选结果
     └── WrongList.tsx          # 易错字表
 ```
 
@@ -268,8 +276,30 @@ level 5 答对 → mastered = true
 - 可发起专项测验（只出易错字）
 
 #### 语音系统 (`lib/voice.ts`)
-- 优先使用预录 MP3 → 回退到 Web Speech API
-- 全局中断机制：`_abortId` 递增
+- **所有音频均为 Azure Speech / Edge TTS 生成** (声音: `zh-CN-XiaoxiaoNeural`，神经网络语音模型)
+- 预录音频存储在 `public/audio/`，通过 `manifest.json` 索引
+- 单音字：`{char}.mp3` — "字，组词1，组词2"
+- 多音字：`{char}-{pinyin}.mp3` — Azure SSML `<phoneme>` 精确控制读音
+- 搭配词：`wp_{word}.mp3` (读词) + `{char}_in_{word}.mp3` (字+词+释义)
+- 带 explain 的字：音频额外包含解释语音
+- Web Speech API 仅作最终 fallback（预录不存在时）
+- 全局中断机制：`_abortId` 递增，切换卡片/题目时立即停止播放
+
+#### 音频生成脚本 (`scripts/`)
+
+| 脚本 | 用途 | TTS 引擎 |
+|------|------|----------|
+| `gen_audio.py` | 生成所有单字发音 MP3 | 单音字: Edge TTS / 多音字: Azure SSML |
+| `gen_explain_audio.py` | 重新生成有 explain 的字 | Edge TTS |
+| `gen_book_audio.py` | 绘本语音 + 字级时间轴 | Azure Speech SDK |
+| `gen_word_pair_audio.py` | 搭配词音频 (读词 + 字在词中) | Azure Speech REST API |
+
+**Azure Speech 配置：**
+```bash
+export AZURE_SPEECH_KEY=<your-key>
+export AZURE_SPEECH_REGION=eastus
+```
+
 - 音效 (`lib/sound-effects.ts`)：AudioContext 合成（答对/答错/胜利）
 
 ### 5.4 绘本馆 (`/picture-books` → ~420 行)
@@ -502,6 +532,7 @@ f708637 feat: 统一抽象字语音为预录音频，翻页停止播放
 | Phase 1 | 用户系统 (Supabase Auth + DB) | ✅ 已完成 |
 | Phase 2 | 智能出题 + 遗忘曲线 + 易错字表 | ✅ 已完成 |
 | Phase 2.7 | 识字模块优化 — 防作弊出题算法 + 模块化拆分 | ✅ 已完成 |
+| Phase 2.8 | 识字优化 — 易混字对比卡 + 搭配词卡 + 九格顺选智能出题 | ✅ 已完成 |
 | Phase 2.5 | 绘本馆 v2 — 点读笔交互 + 对开布局 | 🔧 开发中（代码已写完，待浏览器验证） |
 | Phase 2.6 | 绘本生产 Pipeline — 多 agent 故事生成 + AI 插图 + TTS 配音 | 📋 已设计，待实施 |
 | Phase 3 | 排行榜 (打卡天数/掌握数量/正确率，周榜/月榜/总榜) | 📋 待开发，`game_stats` 表已预留 |

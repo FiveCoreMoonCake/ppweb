@@ -184,8 +184,8 @@ function ChineseLiteracyInner() {
           className="flex-1 py-5 rounded-2xl bg-white border-2 border-amber-200 shadow-sm hover:shadow-md hover:border-amber-400 active:scale-[0.97] transition-all text-center"
         >
           <span className="text-3xl block mb-2">🎮</span>
-          <span className="font-bold text-lg text-amber-700">听音选字</span>
-          <span className="block text-xs text-slate-400 mt-1">九宫格，听音点字</span>
+          <span className="font-bold text-lg text-amber-700">九格顺选</span>
+          <span className="block text-xs text-slate-400 mt-1">九宫格，听音顺选</span>
         </button>
         <button
           onClick={() => setMode("wrongList")}

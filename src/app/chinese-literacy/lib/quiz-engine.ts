@@ -199,12 +199,112 @@ export function generateQuiz(
 }
 
 /**
- * Pick 9 random single-reading chars from learned characters.
- * Fix E: Uses Fisher-Yates shuffle instead of biased sort.
+ * Generate a 9-char listen grid using the same spaced-repetition priority
+ * strategy as generateQuiz: new → due → easy-wrong → rest.
+ * Also seeds the grid with confusable pairs to increase difficulty.
  */
-export function generateListenGrid(progress: Set<string>): CharItem[] {
+export function generateListenGrid(
+  progress: Set<string>,
+  records: Record<string, CharRecord>,
+): CharItem[] {
+  const today = todayStr();
   const pool = allChars.filter((c) => progress.has(c.char) && c.readings.length === 1);
-  return shuffle(pool).slice(0, 9);
+  if (pool.length < 9) return shuffle(pool);
+
+  // Categorize with same priority buckets as quiz
+  const newChars: CharItem[] = [];
+  const dueForReview: CharItem[] = [];
+  const easyWrong: CharItem[] = [];
+  const rest: CharItem[] = [];
+
+  for (const item of pool) {
+    const rec = records[item.char];
+    if (!rec) {
+      newChars.push(item);
+    } else {
+      const total = rec.right + rec.wrong;
+      const accuracy = total > 0 ? rec.right / total : 1;
+      const isEasyWrong = accuracy < 0.5 && total >= 3;
+      const isDue = rec.nextReview <= today;
+      const isMastered = rec.interval >= EBBINGHAUS_INTERVALS.length - 1;
+
+      if (isDue && !isEasyWrong) {
+        dueForReview.push(item);
+      } else if (isEasyWrong) {
+        easyWrong.push(item);
+      } else if (!isMastered) {
+        rest.push(item);
+      }
+    }
+  }
+
+  // Allocate 9 slots: new(4) → due(2) → easyWrong(2) → rest(1)
+  const buckets = [
+    shuffle(newChars),
+    shuffle(dueForReview),
+    shuffle(easyWrong),
+    shuffle(rest),
+  ];
+  const allocs = [4, 2, 2, 1];
+
+  const seen = new Set<string>();
+  const picked: CharItem[] = [];
+
+  // First pass: fill each bucket
+  for (let b = 0; b < buckets.length; b++) {
+    let filled = 0;
+    for (const item of buckets[b]) {
+      if (picked.length >= 9) break;
+      if (filled >= allocs[b]) break;
+      if (seen.has(item.char)) continue;
+      seen.add(item.char);
+      picked.push(item);
+      filled++;
+    }
+  }
+
+  // Second pass: overflow from any bucket
+  if (picked.length < 9) {
+    for (const bucket of buckets) {
+      for (const item of bucket) {
+        if (picked.length >= 9) break;
+        if (seen.has(item.char)) continue;
+        seen.add(item.char);
+        picked.push(item);
+      }
+      if (picked.length >= 9) break;
+    }
+  }
+
+  // Final fallback: fill from full pool
+  if (picked.length < 9) {
+    for (const item of shuffle(pool)) {
+      if (picked.length >= 9) break;
+      if (seen.has(item.char)) continue;
+      seen.add(item.char);
+      picked.push(item);
+    }
+  }
+
+  // Seed confusable pairs: for each picked char, if its confusable is in the
+  // pool and not yet picked, swap out the last rest-bucket char to include it
+  const confusableExtras: CharItem[] = [];
+  for (const item of [...picked]) {
+    const confChars = getConfusableChars(item.char);
+    for (const cc of confChars) {
+      if (seen.has(cc)) continue;
+      const confItem = pool.find((c) => c.char === cc);
+      if (confItem) confusableExtras.push(confItem);
+    }
+  }
+  // Replace tail of picked with confusable extras (max 2 swaps)
+  for (let i = 0; i < Math.min(confusableExtras.length, 2); i++) {
+    if (picked.length >= 9) {
+      picked[picked.length - 1 - i] = confusableExtras[i];
+    }
+  }
+
+  return shuffle(picked.slice(0, 9));
 }
 
 /** Get characters with accuracy < 50% and >= 3 attempts */

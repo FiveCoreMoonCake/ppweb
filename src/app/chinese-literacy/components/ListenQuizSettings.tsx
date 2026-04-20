@@ -23,12 +23,12 @@ export function ListenQuizSettings({
         <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="font-bold text-slate-800 text-lg">听音选字设置</h1>
+        <h1 className="font-bold text-slate-800 text-lg">九格顺选设置</h1>
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 sm:py-10 max-w-xl mx-auto w-full">
         <p className="text-sm text-slate-500 mb-6">
-          从已学的字中随机出 9 个字，排成 3×3 方阵，听音选字。
+          从已学的字中智能出 9 个字，排成 3×3 方阵，听音顺序选出。
           {availableCount > 0 && <span className="text-slate-400"> （可用 {availableCount} 个单音字）</span>}
         </p>
 

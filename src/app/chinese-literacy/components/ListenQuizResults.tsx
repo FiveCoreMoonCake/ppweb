@@ -57,7 +57,7 @@ export function ListenQuizResults({
         <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="font-bold text-slate-800 text-lg">听音选字结果</h1>
+        <h1 className="font-bold text-slate-800 text-lg">九格顺选结果</h1>
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 max-w-lg mx-auto w-full">

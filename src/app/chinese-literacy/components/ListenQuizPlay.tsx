@@ -37,7 +37,7 @@ export function ListenQuizPlay({
 
   // Initialize grid and queue — Fix E: use Fisher-Yates shuffle
   useEffect(() => {
-    const chars = generateListenGrid(progress);
+    const chars = generateListenGrid(progress, records);
     setGrid(chars);
     const order = shuffle(chars.map((_, i) => i));
     setQueue(order);

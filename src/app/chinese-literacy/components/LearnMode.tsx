@@ -7,8 +7,10 @@ import { charGroups } from "@/data/characters";
 import { stopAll } from "../lib/voice";
 import { loadProgressFromDB, saveProgressChar } from "../lib/supabase-progress";
 import { getConfusablePairs } from "../lib/confusables";
+import { getPrimaryWordPair } from "../lib/word-pairs";
 import { CharCard } from "./CharCard";
 import { CompareCard } from "./CompareCard";
+import { WordPairCard } from "./WordPairCard";
 
 export function LearnMode({ onBack, userId }: { onBack: () => void; userId: string }) {
   const [groupIdx, setGroupIdx] = useState(0);
@@ -24,17 +26,22 @@ export function LearnMode({ onBack, userId }: { onBack: () => void; userId: stri
   const group = charGroups[groupIdx];
   const card = group.chars[cardIdx];
 
-  // Mark current card as learned
+  const wordPair = getPrimaryWordPair(card.char);
+
+  // Mark current card as learned (+ partner char if word pair)
   useEffect(() => {
     if (!card) return;
     setLearned((prev) => {
-      if (prev.has(card.char)) return prev;
       const next = new Set(prev);
-      next.add(card.char);
-      saveProgressChar(userId, card.char);
-      return next;
+      let changed = false;
+      if (!next.has(card.char)) { next.add(card.char); saveProgressChar(userId, card.char); changed = true; }
+      if (wordPair) {
+        const partner = wordPair.chars[0] === card.char ? wordPair.chars[1] : wordPair.chars[0];
+        if (!next.has(partner)) { next.add(partner); saveProgressChar(userId, partner); changed = true; }
+      }
+      return changed ? next : prev;
     });
-  }, [card, userId]);
+  }, [card, userId, wordPair]);
 
   const prev = () => { stopAll(); setShowCompare(false); setCardIdx((i) => Math.max(0, i - 1)); };
   const next = () => {
@@ -179,6 +186,8 @@ export function LearnMode({ onBack, userId }: { onBack: () => void; userId: stri
                     <CompareCard key={i} pair={pair} />
                   ))}
                 </div>
+              ) : wordPair ? (
+                <WordPairCard pair={wordPair} />
               ) : (
                 <CharCard item={card} />
               )}
