@@ -22,13 +22,14 @@ export default function LoginPage() {
 function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, loading, signInWithGoogle, signInWithMagicLink } = useAuth();
+  const { user, loading, signInWithGoogle, signUp, signInWithPassword } = useAuth();
 
   const redirect = searchParams.get("redirect") || "/";
 
   const [email, setEmail] = useState("");
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
-  const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [isRegister, setIsRegister] = useState(false);
+  const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Redirect if already logged in
@@ -38,20 +39,26 @@ function LoginInner() {
     }
   }, [user, loading, redirect, router]);
 
-  async function handleMagicLink(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!email.trim()) return;
+    if (!email.trim() || !password) return;
 
     setSubmitting(true);
-    setMagicLinkError(null);
-    setMagicLinkSent(false);
+    setMessage(null);
 
-    const { error } = await signInWithMagicLink(email.trim());
-
-    if (error) {
-      setMagicLinkError(error);
+    if (isRegister) {
+      const { error, needsConfirmation } = await signUp(email.trim(), password);
+      if (error) {
+        setMessage({ type: "err", text: error });
+      } else if (needsConfirmation) {
+        setMessage({ type: "ok", text: "注册成功！请查收确认邮件，点击链接后即可登录" });
+      }
+      // If no confirmation needed, onAuthStateChange will auto-redirect
     } else {
-      setMagicLinkSent(true);
+      const { error } = await signInWithPassword(email.trim(), password);
+      if (error) {
+        setMessage({ type: "err", text: error === "Invalid login credentials" ? "邮箱或密码不正确" : error });
+      }
     }
     setSubmitting(false);
   }
@@ -102,8 +109,8 @@ function LoginInner() {
             </div>
           </div>
 
-          {/* Magic link form */}
-          <form onSubmit={handleMagicLink} className="space-y-3">
+          {/* Email + Password form */}
+          <form onSubmit={handleSubmit} className="space-y-3">
             <label htmlFor="email" className="sr-only">
               邮箱地址
             </label>
@@ -111,47 +118,66 @@ function LoginInner() {
               id="email"
               type="email"
               required
-              placeholder="输入你的邮箱地址"
+              placeholder="邮箱地址"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={submitting}
               className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow disabled:opacity-60"
             />
+            <label htmlFor="password" className="sr-only">
+              密码
+            </label>
+            <input
+              id="password"
+              type="password"
+              required
+              minLength={6}
+              placeholder={isRegister ? "设置密码（至少 6 位）" : "密码"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={submitting}
+              className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow disabled:opacity-60"
+            />
             <button
               type="submit"
-              disabled={submitting || !email.trim()}
+              disabled={submitting || !email.trim() || !password}
               className="w-full rounded-lg bg-indigo-600 px-4 py-3 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {submitting ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  发送中…
+                  {isRegister ? "注册中…" : "登录中…"}
                 </span>
               ) : (
-                "发送登录链接"
+                isRegister ? "注册" : "登录"
               )}
             </button>
           </form>
 
-          {/* Success message */}
-          {magicLinkSent && (
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700"
+          {/* Toggle login / register */}
+          <p className="mt-4 text-center text-sm text-slate-500">
+            {isRegister ? "已有账号？" : "没有账号？"}
+            <button
+              type="button"
+              onClick={() => { setIsRegister(!isRegister); setMessage(null); }}
+              className="ml-1 text-indigo-600 font-medium hover:underline cursor-pointer"
             >
-              登录链接已发送到你的邮箱，请查收
-            </motion.div>
-          )}
+              {isRegister ? "去登录" : "注册新账号"}
+            </button>
+          </p>
 
-          {/* Error message */}
-          {magicLinkError && (
+          {/* Feedback message */}
+          {message && (
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700"
+              className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
+                message.type === "ok"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                  : "bg-red-50 border-red-200 text-red-700"
+              }`}
             >
-              {magicLinkError}
+              {message.text}
             </motion.div>
           )}
         </div>
