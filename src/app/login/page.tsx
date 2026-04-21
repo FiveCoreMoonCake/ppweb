@@ -22,7 +22,7 @@ export default function LoginPage() {
 function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, loading, signInWithGoogle, signUp, signInWithPassword } = useAuth();
+  const { user, loading, signInWithGoogle, signUp, signInWithPassword, resetPassword } = useAuth();
 
   const redirect = searchParams.get("redirect") || "/";
 
@@ -165,6 +165,29 @@ function LoginInner() {
               {isRegister ? "去登录" : "注册新账号"}
             </button>
           </p>
+
+          {/* Forgot password — also used for existing Magic Link users to set a password */}
+          {!isRegister && (
+            <p className="mt-2 text-center">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={async () => {
+                  if (!email.trim()) { setMessage({ type: "err", text: "请先输入邮箱地址" }); return; }
+                  setSubmitting(true); setMessage(null);
+                  const { error } = await resetPassword(email.trim());
+                  setMessage(error
+                    ? { type: "err", text: error }
+                    : { type: "ok", text: "密码重置邮件已发送，请查收" }
+                  );
+                  setSubmitting(false);
+                }}
+                className="text-xs text-slate-400 hover:text-indigo-600 hover:underline cursor-pointer disabled:opacity-50"
+              >
+                忘记密码 / 设置密码
+              </button>
+            </p>
+          )}
 
           {/* Feedback message */}
           {message && (
