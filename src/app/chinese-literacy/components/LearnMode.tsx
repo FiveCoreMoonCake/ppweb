@@ -28,20 +28,17 @@ export function LearnMode({ onBack, userId }: { onBack: () => void; userId: stri
 
   const wordPair = getPrimaryWordPair(card.char);
 
-  // Mark current card as learned (+ partner char if word pair)
+  // Mark current card as learned
   useEffect(() => {
     if (!card) return;
     setLearned((prev) => {
+      if (prev.has(card.char)) return prev;
       const next = new Set(prev);
-      let changed = false;
-      if (!next.has(card.char)) { next.add(card.char); saveProgressChar(userId, card.char); changed = true; }
-      if (wordPair) {
-        const partner = wordPair.chars[0] === card.char ? wordPair.chars[1] : wordPair.chars[0];
-        if (!next.has(partner)) { next.add(partner); saveProgressChar(userId, partner); changed = true; }
-      }
-      return changed ? next : prev;
+      next.add(card.char);
+      saveProgressChar(userId, card.char);
+      return next;
     });
-  }, [card, userId, wordPair]);
+  }, [card, userId]);
 
   const prev = () => { stopAll(); setShowCompare(false); setCardIdx((i) => Math.max(0, i - 1)); };
   const next = () => {

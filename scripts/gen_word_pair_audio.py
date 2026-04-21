@@ -51,6 +51,7 @@ def azure_tts(ssml: str, outpath: str, token: str):
             "X-Microsoft-OutputFormat": "audio-16khz-128kbitrate-mono-mp3",
         },
         data=ssml.encode("utf-8"),
+        timeout=30,
     )
     resp.raise_for_status()
     with open(outpath, "wb") as f:
