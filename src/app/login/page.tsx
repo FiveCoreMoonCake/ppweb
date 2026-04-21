@@ -22,7 +22,7 @@ export default function LoginPage() {
 function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, loading, signInWithGoogle, signUp, signInWithPassword, resetPassword } = useAuth();
+  const { user, loading, signInWithGoogle, signUp, signInWithPassword, resetPassword, updatePassword, isPasswordRecovery, clearPasswordRecovery } = useAuth();
 
   const redirect = searchParams.get("redirect") || "/";
 
@@ -31,13 +31,29 @@ function LoginInner() {
   const [isRegister, setIsRegister] = useState(false);
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
 
-  // Redirect if already logged in
+  // Redirect if already logged in (but NOT during password recovery)
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user && !isPasswordRecovery) {
       router.replace(redirect);
     }
-  }, [user, loading, redirect, router]);
+  }, [user, loading, redirect, router, isPasswordRecovery]);
+
+  async function handleSetNewPassword(e: FormEvent) {
+    e.preventDefault();
+    if (!newPassword || newPassword.length < 6) return;
+    setSubmitting(true);
+    setMessage(null);
+    const { error } = await updatePassword(newPassword);
+    if (error) {
+      setMessage({ type: "err", text: error });
+    } else {
+      setMessage({ type: "ok", text: "密码设置成功！正在跳转…" });
+      setTimeout(() => router.replace(redirect), 1500);
+    }
+    setSubmitting(false);
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -64,10 +80,65 @@ function LoginInner() {
   }
 
   // Show nothing while checking auth state
-  if (loading || user) {
+  if (loading || (user && !isPasswordRecovery)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Password recovery mode — show "set new password" form
+  if (isPasswordRecovery) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center px-4">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: "easeOut" }}
+          className="w-full max-w-sm"
+        >
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+            <h1 className="text-2xl font-bold text-slate-800 text-center tracking-tight">
+              设置新密码
+            </h1>
+            <p className="text-sm text-slate-500 text-center mt-2">
+              请输入你的新密码
+            </p>
+            <form onSubmit={handleSetNewPassword} className="mt-6 space-y-3">
+              <input
+                type="password"
+                required
+                minLength={6}
+                placeholder="新密码（至少 6 位）"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                disabled={submitting}
+                className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow disabled:opacity-60"
+              />
+              <button
+                type="submit"
+                disabled={submitting || newPassword.length < 6}
+                className="w-full rounded-lg bg-indigo-600 px-4 py-3 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {submitting ? "保存中…" : "确认设置"}
+              </button>
+            </form>
+            {message && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
+                  message.type === "ok"
+                    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                    : "bg-red-50 border-red-200 text-red-700"
+                }`}
+              >
+                {message.text}
+              </motion.div>
+            )}
+          </div>
+        </motion.div>
       </div>
     );
   }
