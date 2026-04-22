@@ -119,6 +119,47 @@ export const wordPairs: WordPair[] = [
       { phrases: ["告诉的诉", "诉说的诉"], meaning: "把心里的事说出来" },
     ],
   },
+
+  // ── 虫/动物（拆开无意义）──
+  {
+    word: "蝴蝶", chars: ["蝴", "蝶"], emoji: "🦋",
+    charContexts: [
+      { phrases: ["蝴蝶的蝴"], meaning: "蝴蝶的前半部分，虫字旁" },
+      { phrases: ["蝴蝶的蝶"], meaning: "蝴蝶的后半部分，虫字旁" },
+    ],
+  },
+  {
+    word: "蚂蚁", chars: ["蚂", "蚁"], emoji: "🐜",
+    charContexts: [
+      { phrases: ["蚂蚁的蚂"], meaning: "蚂蚁的前半部分，虫字旁加马" },
+      { phrases: ["蚂蚁的蚁"], meaning: "蚂蚁的后半部分，虫字旁加义" },
+    ],
+  },
+  {
+    word: "蜜蜂", chars: ["蜜", "蜂"], emoji: "🐝",
+    charContexts: [
+      { phrases: ["蜜蜂的蜜", "甜蜜的蜜"], meaning: "甜甜的，蜜蜂酿出来的就是蜜" },
+      { phrases: ["蜜蜂的蜂", "蜂蜜的蜂"], meaning: "会飞会采花的小虫子就是蜂" },
+    ],
+  },
+
+  // ── 抽象虚字 ──
+  {
+    word: "自己", chars: ["自", "己"], emoji: "🙋",
+    explain: "说的就是我本人",
+    charContexts: [
+      { phrases: ["自己的自", "自然的自"], meaning: "从自身出发，由我开始" },
+      { phrases: ["自己的己", "知己的己"], meaning: "就是我这个人" },
+    ],
+  },
+  {
+    word: "向往", chars: ["向", "往"], emoji: "🌈",
+    explain: "心里很想去、很想要",
+    charContexts: [
+      { phrases: ["向往的向", "方向的向"], meaning: "朝着那个方向，面对着" },
+      { phrases: ["向往的往", "来往的往"], meaning: "去、朝那边走的意思" },
+    ],
+  },
 ];
 
 // ── Lookup ──

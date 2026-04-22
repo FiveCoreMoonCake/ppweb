@@ -597,5 +597,20 @@
   "店_in_商店": "/audio/店_in_商店.mp3",
   "wp_医院": "/audio/wp_医院.mp3",
   "医_in_医院": "/audio/医_in_医院.mp3",
-  "院_in_医院": "/audio/院_in_医院.mp3"
+  "院_in_医院": "/audio/院_in_医院.mp3",
+  "wp_蝴蝶": "/audio/wp_蝴蝶.mp3",
+  "蝴_in_蝴蝶": "/audio/蝴_in_蝴蝶.mp3",
+  "蝶_in_蝴蝶": "/audio/蝶_in_蝴蝶.mp3",
+  "wp_蚂蚁": "/audio/wp_蚂蚁.mp3",
+  "蚂_in_蚂蚁": "/audio/蚂_in_蚂蚁.mp3",
+  "蚁_in_蚂蚁": "/audio/蚁_in_蚂蚁.mp3",
+  "wp_蜜蜂": "/audio/wp_蜜蜂.mp3",
+  "蜜_in_蜜蜂": "/audio/蜜_in_蜜蜂.mp3",
+  "蜂_in_蜜蜂": "/audio/蜂_in_蜜蜂.mp3",
+  "wp_自己": "/audio/wp_自己.mp3",
+  "自_in_自己": "/audio/自_in_自己.mp3",
+  "己_in_自己": "/audio/己_in_自己.mp3",
+  "wp_向往": "/audio/wp_向往.mp3",
+  "向_in_向往": "/audio/向_in_向往.mp3",
+  "往_in_向往": "/audio/往_in_向往.mp3"
 }

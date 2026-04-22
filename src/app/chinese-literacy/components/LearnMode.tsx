@@ -28,24 +28,54 @@ export function LearnMode({ onBack, userId }: { onBack: () => void; userId: stri
 
   const wordPair = getPrimaryWordPair(card.char);
 
-  // Mark current card as learned
+  /** Check if charIdx is the partner of a word pair whose primary char is the previous card */
+  const isWordPairPartner = (gIdx: number, cIdx: number): boolean => {
+    if (cIdx <= 0) return false;
+    const prevChar = charGroups[gIdx].chars[cIdx - 1].char;
+    const curChar = charGroups[gIdx].chars[cIdx].char;
+    const wp = getPrimaryWordPair(prevChar);
+    return !!wp && wp.chars.includes(curChar);
+  };
+
+  // Mark current card (and word pair partner) as learned
   useEffect(() => {
     if (!card) return;
+    const charsToLearn = [card.char];
+    if (wordPair) {
+      const partner = wordPair.chars.find((c) => c !== card.char);
+      if (partner) charsToLearn.push(partner);
+    }
     setLearned((prev) => {
-      if (prev.has(card.char)) return prev;
+      if (charsToLearn.every((c) => prev.has(c))) return prev;
       const next = new Set(prev);
-      next.add(card.char);
-      saveProgressChar(userId, card.char);
+      for (const c of charsToLearn) {
+        if (!next.has(c)) {
+          next.add(c);
+          saveProgressChar(userId, c);
+        }
+      }
       return next;
     });
-  }, [card, userId]);
+  }, [card, userId, wordPair]);
 
-  const prev = () => { stopAll(); setShowCompare(false); setCardIdx((i) => Math.max(0, i - 1)); };
+  const prev = () => {
+    stopAll();
+    setShowCompare(false);
+    let newG = groupIdx;
+    let newC = cardIdx - 1;
+    if (newC < 0) return;
+    // Skip word pair partner going backward
+    if (isWordPairPartner(newG, newC) && newC > 0) newC--;
+    setCardIdx(newC);
+  };
   const next = () => {
     stopAll();
     setShowCompare(false);
     if (cardIdx < group.chars.length - 1) {
-      setCardIdx((i) => i + 1);
+      let newC = cardIdx + 1;
+      // Skip word pair partner going forward
+      if (isWordPairPartner(groupIdx, newC) && newC < group.chars.length - 1) newC++;
+      setCardIdx(newC);
     } else if (groupIdx < charGroups.length - 1) {
       setGroupIdx((g) => g + 1);
       setCardIdx(0);
@@ -53,7 +83,12 @@ export function LearnMode({ onBack, userId }: { onBack: () => void; userId: stri
   };
   const selectGroup = (i: number) => { stopAll(); setShowCompare(false); setGroupIdx(i); setCardIdx(0); setSidebarOpen(false); };
 
-  const confusablePairsForCard = getConfusablePairs(card.char);
+  // Filter out confusable pairs that exactly match current word pair
+  const confusablePairsForCard = getConfusablePairs(card.char).filter((cp) => {
+    if (!wordPair) return true;
+    const [a, b] = cp.chars;
+    return !(wordPair.chars.includes(a) && wordPair.chars.includes(b));
+  });
   const hasConfusables = confusablePairsForCard.length > 0;
 
   const learnedInGroup = group.chars.filter((c) => learned.has(c.char)).length;

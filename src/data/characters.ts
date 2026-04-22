@@ -660,6 +660,8 @@ const p25: CharItem[] = [
   { char: "忘", readings: [{ pinyin: "wàng", words: ["忘记", "忘了"], emoji: "🤔" }], groupId: "p25" },
   { char: "变", readings: [{ pinyin: "biàn", words: ["变化", "改变"], emoji: "🔄" }], groupId: "p25", explain: "变化的变，水变成冰了不一样了就是变" },
   { char: "满", readings: [{ pinyin: "mǎn", words: ["满意", "充满"], emoji: "🫙" }], groupId: "p25" },
+  { char: "告", readings: [{ pinyin: "gào", words: ["告诉", "告别"], emoji: "🗣️" }], groupId: "p25" },
+  { char: "诉", readings: [{ pinyin: "sù", words: ["告诉", "诉说"], emoji: "💬" }], groupId: "p25", explain: "告诉的诉，把心里的事说出来就是诉" },
 ];
 
 export const charGroups: CharGroup[] = [

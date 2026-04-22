@@ -81,9 +81,9 @@ def build_char_in_word_ssml(char: str, phrases: list[str], meaning: str) -> str:
   <voice name='{VOICE}'>
     <prosody rate='{RATE}'>
       {char}
-      <break time='500ms'/>
+      <break time='250ms'/>
       {phrase_parts}。
-      <break time='400ms'/>
+      <break time='300ms'/>
       {meaning}
     </prosody>
   </voice>
