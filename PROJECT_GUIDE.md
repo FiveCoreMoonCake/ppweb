@@ -156,6 +156,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
 | Phase 2.7 | 防作弊出题 + 模块化拆分 | ✅ |
 | Phase 2.8 | 易混字对比卡 + 搭配词卡 + 九格顺选智能出题 | ✅ |
 | Phase 2.9 | 邮箱密码注册登录 + 密码重置 | ✅ |
+| Phase 2.10 | 词组卡 UX 优化（跳过重复、过滤易混字、音频紧凑）+ 扩展至 14 组词组 | ✅ |
 | Phase 2.5 | 绘本馆 v2 — 点读笔交互 | 🔧 代码完成 |
 | Phase 2.6 | 绘本生产 Pipeline | 📋 待实施 |
 | Phase 3 | 排行榜 | 📋 表已建 |

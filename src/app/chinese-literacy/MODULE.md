@@ -16,7 +16,7 @@ chinese-literacy/
 │   ├── shuffle.ts              # Fisher-Yates 洗牌
 │   ├── voice.ts                # TTS/预录音频系统
 │   ├── confusables.ts          # 易混字对比数据 (35组)
-│   ├── word-pairs.ts           # 搭配词数据 (9组，仅抽象字)
+│   ├── word-pairs.ts           # 搭配词数据 (14组，抽象字/拆开无意义字)
 │   ├── supabase-progress.ts    # Supabase 数据持久化
 │   ├── spaced-repetition.ts    # 遗忘曲线算法
 │   ├── sound-effects.ts        # 音效合成
@@ -105,13 +105,21 @@ level 5 答对 → mastered = true
 ## 搭配词卡 (`word-pairs.ts` + `WordPairCard.tsx`)
 
 **设计原则**：
-- **只配对真正抽象的字**（喜、欢、朋、友…），具体直观字不配对
+- **只配对真正抽象的字**（喜、欢、朋、友…），或**拆开无意义**的字（蝴、蝶）
 - **避免多音字混淆**：不引入无关读音
-- **不自动标记配对字为已学**
+- 搭配词卡**一页同时显示两个字**，同组相邻的配对字翻页时自动跳过
 
-当前 9 组：喜欢、害怕、朋友、知道、认识、东西、可以、愿意、告诉
+当前 14 组：
+- 情感/认知：喜欢、害怕、朋友、知道、认识、自己、向往、愿意、可以、告诉
+- 方位/事物：东西
+- 生物（拆开无意义）：蝴蝶、蚂蚁、蜜蜂
 
-**音频**：`wp_{word}.mp3` + `{char}_in_{word}.mp3` — Azure Speech XiaoxiaoNeural
+**LearnMode 行为**（关键）：
+- 当配对两字在同一组相邻时，`next()` / `prev()` 自动跳过配对字，避免词组卡重复
+- 查看词组卡时，**两个字同时标记为已学**（`learned` set 一次加两个）
+- 易混字对比按钮会**过滤掉与当前词组重叠的易混字对**（如看"朋友"时不显示朋↔友对比）
+
+**音频**：`wp_{word}.mp3` + `{char}_in_{word}.mp3` — Azure Speech XiaoxiaoNeural，SSML break 250ms/300ms（停顿紧凑）
 
 ---
 
