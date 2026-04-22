@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Volume2, ArrowLeft, Check, X as XIcon } from "lucide-react";
+import { Volume2, ArrowLeft, Check, X as XIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import type { CharRecord, QuizQuestion, QuizAnswer } from "../lib/types";
 import { stopAll, playPrerecorded, speak, speakReading } from "../lib/voice";
 import { playCorrectSound, playWrongSound } from "../lib/sound-effects";
@@ -24,15 +24,36 @@ export function QuizPlay({
   onRecordsChange: (r: Record<string, CharRecord>) => void;
 }) {
   const [qIdx, setQIdx] = useState(0);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<QuizAnswer[]>([]);
-  const hasSpoken = useRef(false);
+  // Per-question persisted answer state (null = not yet answered)
+  const [answerMap, setAnswerMap] = useState<(QuizAnswer | null)[]>(
+    () => questions.map(() => null)
+  );
+  // Per-question set of chars tapped AFTER answering (to fulfill "hear both" requirement)
+  const [tappedMap, setTappedMap] = useState<string[][]>(
+    () => questions.map(() => [])
+  );
+  const autoSpokenRef = useRef<Set<number>>(new Set());
 
   const q = questions[qIdx];
   const reading = q.correct.readings[q.readingIdx];
   const isPolyphonic = q.correct.readings.length > 1;
-  const isCorrect = selected === q.correct.char;
-  const answered = selected !== null;
+  const currentAnswer = answerMap[qIdx];
+  const selected = currentAnswer?.selected ?? null;
+  const answered = currentAnswer !== null;
+  const isCorrect = currentAnswer?.isCorrect ?? false;
+  const tappedHere = tappedMap[qIdx];
+
+  // Gate "next" on wrong answers: require listening to both wrong pick + correct char
+  const mustListenBoth = answered && !isCorrect;
+  const listenedBoth = mustListenBoth
+    ? tappedHere.includes(selected!) && tappedHere.includes(q.correct.char)
+    : true;
+  const canProceed = answered && listenedBoth;
+
+  const answeredCount = useMemo(
+    () => answerMap.filter((a) => a !== null).length,
+    [answerMap]
+  );
 
   const speakPrompt = useCallback(() => {
     stopAll();
@@ -44,23 +65,28 @@ export function QuizPlay({
     }
   }, [q.correct.char, reading, isPolyphonic]);
 
+  // Auto-speak prompt only on first visit to an unanswered question
   useEffect(() => {
-    hasSpoken.current = false;
+    if (answered) return;
+    if (autoSpokenRef.current.has(qIdx)) return;
     const timer = setTimeout(() => {
-      if (!hasSpoken.current) {
+      if (!autoSpokenRef.current.has(qIdx)) {
         speakPrompt();
-        hasSpoken.current = true;
+        autoSpokenRef.current.add(qIdx);
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [qIdx, speakPrompt]);
+  }, [qIdx, answered, speakPrompt]);
 
   const handleSelect = (char: string) => {
     if (answered) return;
-    setSelected(char);
     const correct = char === q.correct.char;
     const answer: QuizAnswer = { question: q, selected: char, isCorrect: correct };
-    setAnswers((prev) => [...prev, answer]);
+    setAnswerMap((prev) => {
+      const next = prev.slice();
+      next[qIdx] = answer;
+      return next;
+    });
 
     onRecordsChange(recordAnswerLocal(records, q.correct.char, correct, userId));
 
@@ -76,19 +102,36 @@ export function QuizPlay({
     }
   };
 
+  const markTapped = (char: string) => {
+    setTappedMap((prev) => {
+      if (prev[qIdx].includes(char)) return prev;
+      const next = prev.slice();
+      next[qIdx] = [...next[qIdx], char];
+      return next;
+    });
+  };
+
   const handleNext = () => {
+    if (!canProceed) return;
     stopAll();
     if (qIdx < questions.length - 1) {
-      setSelected(null);
       setQIdx((i) => i + 1);
     } else {
-      onFinish(answers);
+      // Finish: pass answers in original question order, filtering nulls defensively
+      const finalAnswers = answerMap.filter((a): a is QuizAnswer => a !== null);
+      onFinish(finalAnswers);
     }
+  };
+
+  const handlePrev = () => {
+    if (qIdx === 0) return;
+    stopAll();
+    setQIdx((i) => i - 1);
   };
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (answered && (e.key === "Enter" || e.key === " ")) {
+      if (canProceed && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
         handleNext();
       }
@@ -98,6 +141,14 @@ export function QuizPlay({
       }
       if (e.key === "r" || e.key === "R") {
         speakPrompt();
+      }
+      if (e.key === "ArrowLeft" && qIdx > 0) {
+        e.preventDefault();
+        handlePrev();
+      }
+      if (e.key === "ArrowRight" && canProceed) {
+        e.preventDefault();
+        handleNext();
       }
     };
     window.addEventListener("keydown", handler);
@@ -116,7 +167,7 @@ export function QuizPlay({
         <div className="w-24 h-1.5 bg-slate-200 rounded-full overflow-hidden">
           <div
             className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-            style={{ width: `${((qIdx + (answered ? 1 : 0)) / questions.length) * 100}%` }}
+            style={{ width: `${(answeredCount / questions.length) * 100}%` }}
           />
         </div>
       </header>
@@ -139,6 +190,7 @@ export function QuizPlay({
               const isWrongPick = answered && opt.char === selected && !isCorrectOpt;
               const showDetail = answered && (isCorrectOpt || isWrongPick);
               const optReading = opt.readings[0];
+              const needsTap = mustListenBoth && (isCorrectOpt || isWrongPick) && !tappedHere.includes(opt.char);
 
               let style = "bg-white border-slate-200 text-slate-800 hover:border-indigo-300 hover:shadow-md";
               if (answered) {
@@ -146,11 +198,13 @@ export function QuizPlay({
                 else if (isWrongPick) style = "bg-rose-50 border-rose-400 text-rose-600";
                 else style = "bg-slate-50 border-slate-200 text-slate-400";
               }
+              if (needsTap) style += " animate-pulse ring-2 ring-amber-300";
 
               const handleClick = () => {
                 if (!answered) { handleSelect(opt.char); return; }
                 if (showDetail) {
                   speakReading(opt.char, optReading, opt.char);
+                  markTapped(opt.char);
                 }
               };
 
@@ -194,22 +248,58 @@ export function QuizPlay({
                   <p className="text-emerald-600 font-bold text-sm flex items-center justify-center gap-1.5">
                     <Check className="w-5 h-5" /> 太棒了！
                   </p>
+                ) : !listenedBoth ? (
+                  <p className="text-amber-600 font-bold text-sm flex items-center justify-center gap-1.5">
+                    <XIcon className="w-4 h-4" /> 点一点两个字，听听读音再继续
+                  </p>
                 ) : (
                   <p className="text-rose-500 font-bold text-sm flex items-center justify-center gap-1.5">
-                    <XIcon className="w-4 h-4" /> 答错了，点字听读音
+                    <XIcon className="w-4 h-4" /> 再试试下一题吧
                   </p>
                 )}
               </div>
 
+              <div className="w-full max-w-sm flex gap-2">
+                <button
+                  onClick={handlePrev}
+                  disabled={qIdx === 0}
+                  className="shrink-0 px-3 py-3 rounded-xl font-bold text-base bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center justify-center"
+                  aria-label="上一题"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={handleNext}
+                  disabled={!canProceed}
+                  className={`flex-1 py-3 rounded-xl font-bold text-base active:scale-[0.98] transition-all flex items-center justify-center gap-1 ${
+                    !canProceed
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                      : isCorrect
+                      ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                      : "bg-indigo-500 text-white hover:bg-indigo-600"
+                  }`}
+                >
+                  {qIdx < questions.length - 1 ? (
+                    <>下一题 <ChevronRight className="w-5 h-5" /></>
+                  ) : (
+                    "查看结果"
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {!answered && qIdx > 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="shrink-0 border-t border-slate-200 bg-white px-4 py-2 flex justify-center"
+            >
               <button
-                onClick={handleNext}
-                className={`w-full max-w-sm py-3 rounded-xl font-bold text-base active:scale-[0.98] transition-all ${
-                  isCorrect
-                    ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                    : "bg-indigo-500 text-white hover:bg-indigo-600"
-                }`}
+                onClick={handlePrev}
+                className="text-slate-500 hover:text-slate-700 text-sm font-medium flex items-center gap-1 py-1"
               >
-                {qIdx < questions.length - 1 ? "下一题 →" : "查看结果"}
+                <ChevronLeft className="w-4 h-4" /> 上一题
               </button>
             </motion.div>
           )}
