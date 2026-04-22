@@ -1,21 +1,20 @@
 # PP 学习工具箱 - 项目框架文档
 
-> 本文档为 AI Agent 快速上手指南，每次新 Agent 启动时阅读此文档即可全面掌握项目情况。
-> 最后更新: 2026-04-14
+> AI Agent 快速上手指南。各模块详情见对应 MODULE.md / AUTH.md，按需阅读。
+> 最后更新: 2026-04-21
 
 ---
 
 ## 1. 项目概述
 
-**PP 学习工具箱** 是一个交互式学习工具合集 Web 应用，目前包含 3 个功能模块：
+交互式学习工具合集 Web 应用，前端 + Supabase BaaS。
 
-| 模块 | 路由 | 面向人群 | 核心功能 |
-|------|------|----------|----------|
-| 地产权与未来利益通关表 | `/property-law` | 法学学习者 | Property Law MBE 交互式思维导图 |
-| 中文识字 | `/chinese-literacy` | 学龄前儿童 | 字卡学习 + 智能测验 + 九宫格游戏 + 易错字表 |
-| 绘本馆 | `/picture-books` | 儿童 | 有声绘本逐字高亮朗读 |
-
-**定位**: 前端 + Supabase BaaS，支持用户登录和多设备数据同步。
+| 模块 | 路由 | 详细文档 |
+|------|------|----------|
+| 中文识字 | `/chinese-literacy` | `src/app/chinese-literacy/MODULE.md` |
+| 绘本馆 | `/picture-books` | `src/app/picture-books/MODULE.md` |
+| 地产权思维导图 | `/property-law` | `src/app/property-law/MODULE.md` |
+| 认证系统 | `/login` + `src/lib/` | `src/lib/AUTH.md` |
 
 ---
 
@@ -23,18 +22,17 @@
 
 | 类别 | 技术 | 版本 |
 |------|------|------|
-| 框架 | Next.js (App Router) | 16.2.1 |
-| UI 库 | React | 19.2.4 |
+| 框架 | Next.js (App Router) | 16 |
+| UI | React | 19 |
 | 语言 | TypeScript (strict) | 5+ |
 | 样式 | Tailwind CSS | 4 |
-| 动画 | Framer Motion | 12.38.0 |
-| 图标 | Lucide React | 1.7.0 |
-| 图表 | ECharts + echarts-for-react | 6.0.0 / 3.0.6 |
-| 内容 | MDX (@next/mdx) | - |
-| 后端/Auth/DB | Supabase (Auth + PostgreSQL) | @supabase/supabase-js |
-| 构建 | Turbopack (Next.js 16 默认) | - |
+| 动画 | Framer Motion | 12 |
+| 图标 | Lucide React | 1.7 |
+| 图表 | ECharts | 6 |
+| 后端 | Supabase (Auth + PostgreSQL) | @supabase/supabase-js |
+| 构建 | Turbopack | - |
 
-**重要**: 此项目使用 **Next.js 16**，与旧版有重大变化。编写代码前务必阅读 `node_modules/next/dist/docs/` 中的文档。
+**⚠️ Next.js 16** 与旧版有重大变化，编码前读 `node_modules/next/dist/docs/`。
 
 ---
 
@@ -43,497 +41,128 @@
 ```
 ppweb/
 ├── src/
-│   ├── app/                          # Next.js App Router 页面
-│   │   ├── layout.tsx                # 根布局 (字体 + AuthProvider 包裹)
-│   │   ├── page.tsx                  # 首页 - 工具列表 + 右上角登录/头像 (133 行)
-│   │   ├── globals.css               # 全局样式 (Tailwind v4 + CSS 变量)
-│   │   ├── login/
-│   │   │   └── page.tsx              # 登录页 - Google OAuth + Magic Link (190 行)
-│   │   ├── chinese-literacy/
-│   │   │   ├── page.tsx              # 中文识字 - 主页面 (模式路由 + 状态管理, ~210 行)
-│   │   │   ├── lib/
-│   │   │   │   ├── types.ts          # 共享类型定义 (CharRecord, QuizQuestion 等)
-│   │   │   │   ├── shuffle.ts        # Fisher-Yates 洗牌工具
-│   │   │   │   ├── voice.ts          # TTS/语音系统 (预录音频 + 浏览器 TTS)
-│   │   │   │   ├── confusables.ts    # 易混字对比数据 (35组)
-│   │   │   │   ├── word-pairs.ts     # 搭配词学习数据 (25+组)
-│   │   │   │   ├── supabase-progress.ts # Supabase 数据持久化 (进度 + 学习记录)
-│   │   │   │   ├── spaced-repetition.ts # 遗忘曲线算法 (Ebbinghaus 间隔)
-│   │   │   │   ├── sound-effects.ts  # 音效 (答对/答错/胜利)
-│   │   │   │   └── quiz-engine.ts    # 智能出题引擎 (防作弊 + 易混字干扰项 + 去重)
-│   │   │   └── components/
-│   │   │       ├── CharCard.tsx       # 字卡组件 (PixelEmoji + 朗读按钮)
-│   │   │       ├── CompareCard.tsx    # 易混字对比卡 (并排对比 + 记忆提示)
-│   │   │       ├── WordPairCard.tsx   # 搭配词卡 (词+双字卡 + 点击读详细)
-│   │   │       ├── LearnMode.tsx      # 学习模式 (翻卡 + 分组导航 + 搭配词/易混字)
-│   │   │       ├── QuizSettings.tsx   # 测验设置 (题目数量选择)
-│   │   │       ├── QuizPlay.tsx       # 测验答题 (2×2 选项 + 反馈)
-│   │   │       ├── QuizResults.tsx    # 测验结果 (复习 + 总结)
-│   │   │       ├── ListenQuizSettings.tsx # 九格顺选设置
-│   │   │       ├── ListenQuizPlay.tsx # 九格顺选 3×3 游戏
-│   │   │       ├── ListenQuizResults.tsx # 九格顺选结果
-│   │   │       └── WrongList.tsx      # 易错字表 + 专项练习
-│   │   ├── picture-books/
-│   │   │   └── page.tsx              # 绘本馆 (650 行)
-│   │   ├── property-law/
-│   │   │   └── page.tsx              # 地产权思维导图 (387 行)
-│   │   └── article/
-│   │       └── page.mdx              # MDX 文章 demo
-│   ├── lib/                          # 共享基础设施
-│   │   ├── supabase.ts               # Supabase 客户端 (懒初始化 Proxy，防 SSR/构建崩溃)
-│   │   ├── auth-context.tsx          # AuthProvider + useAuth hook (118 行)
-│   │   ├── require-auth.tsx          # RequireAuth 登录守卫组件 (39 行)
-│   │   └── migrate-local-data.ts     # localStorage → Supabase 数据迁移 (274 行)
-│   ├── data/                         # 静态数据模块
-│   │   ├── characters.ts             # 汉字数据 (693 行, 500+字分25组)
-│   │   ├── property-law.ts           # 地产权法学数据 (113 行)
-│   │   └── tools.ts                  # 工具注册表 (48 行)
-│   └── mdx-components.tsx            # MDX 组件映射
-├── public/                           # 静态资源
-│   ├── audio/                        # 汉字发音 MP3 (528+ 个文件)
-│   │   ├── manifest.json             # 字/词 → MP3 路径映射表
-│   │   ├── *.mp3                     # 单字发音 + 多音字特定读音
-│   │   ├── wp_*.mp3                  # 搭配词整词发音 (如 wp_喜欢.mp3)
-│   │   └── *_in_*.mp3                # 字在词中的详细读音 (如 喜_in_喜欢.mp3)
+│   ├── app/
+│   │   ├── layout.tsx                # 根布局 (AuthProvider)
+│   │   ├── page.tsx                  # 首页 (工具列表 + 登录状态)
+│   │   ├── globals.css               # Tailwind v4 全局样式
+│   │   ├── login/page.tsx            # 登录页 (邮箱密码 + Google OAuth)
+│   │   ├── chinese-literacy/         # 识字模块 → MODULE.md
+│   │   ├── picture-books/            # 绘本馆 → MODULE.md
+│   │   ├── property-law/             # 地产权 → MODULE.md
+│   │   └── article/page.mdx          # MDX demo
+│   ├── lib/                          # 共享: auth + supabase → AUTH.md
+│   └── data/                         # 静态数据 (characters/tools/property-law)
+├── public/
+│   ├── audio/                        # 汉字发音 MP3 (600+ 文件) + manifest.json
 │   └── books/                        # 绘本数据
-│       └── rabbit-carrot/            # 《小白兔找萝卜》(book.json + p1~p10.mp3)
-├── scripts/                          # 构建/数据生成脚本 (Python + Node.js)
-├── .env.local                        # Supabase URL + anon key (不入库)
-├── next.config.mjs                   # Next.js 配置 (MDX + remark 插件)
-├── package.json                      # 依赖管理
-├── tsconfig.json                     # TypeScript 配置
-└── CLAUDE.md → AGENTS.md             # Agent 行为约束
+├── scripts/                          # 音频/数据生成脚本
+└── CLAUDE.md / AGENTS.md             # Agent 约束
 ```
 
 ---
 
-## 4. 核心架构模式
+## 4. Supabase 数据
 
-### 4.1 用户认证与登录流程
+**表结构：**
 
-```
-用户打开网站 → 首页自由浏览（无需登录）
-    │
-    └── 点击任意游戏工具 → RequireAuth 检查登录状态
-            ├── 已登录 → 进入游戏
-            └── 未登录 → 跳转 /login?redirect=xxx
-                          ├── Google OAuth 一键登录
-                          └── 邮箱 Magic Link 登录
-                          → 登录成功 → 自动迁移 localStorage 老数据 → 跳回游戏页
-```
-
-**关键组件：**
-- `AuthProvider`（`src/lib/auth-context.tsx`）：全局 React Context，提供 `useAuth()` hook
-- `RequireAuth`（`src/lib/require-auth.tsx`）：游戏页面守卫，未登录自动跳转
-- `migrateLocalData`（`src/lib/migrate-local-data.ts`）：首次登录时自动迁移 localStorage 数据
-
-### 4.2 数据持久化：Supabase PostgreSQL
-
-**数据流**：前端 → Supabase JS SDK → Supabase PostgreSQL（直连，无 API Routes）
-
-**Supabase 表结构：**
 | 表名 | 用途 | RLS |
 |------|------|-----|
-| `profiles` | 用户信息（昵称、头像） | 所有人可读，本人可写 |
-| `game_stats` | 排行榜数据（预留） | 所有人可读，本人可写 |
-| `literacy_records` | 识字游戏 - 每字学习记录 | 本人可读写 |
-| `literacy_progress` | 识字游戏 - 已浏览的字 | 本人可读写 |
+| `profiles` | 用户信息 | 所有人可读，本人可写 |
+| `game_stats` | 排行榜（预留） | 所有人可读，本人可写 |
+| `literacy_records` | 每字学习记录 | 本人可读写 |
+| `literacy_progress` | 已浏览的字 | 本人可读写 |
 
-**识字游戏学习记录（`literacy_records`）：**
 ```sql
+-- literacy_records
 (user_id, char, right_count, wrong_count, level, last_seen, next_review, mastered)
--- level: 0~5 对应遗忘曲线等级
--- UNIQUE(user_id, char)
-```
+-- UNIQUE(user_id, char), level 0~5
 
-**排行榜数据（`game_stats`，预留）：**
-```sql
+-- literacy_progress
+(user_id, char, learned_at)
+
+-- game_stats (预留)
 (user_id, game_id, total_days, streak_days, last_played_at, mastered_count, total_attempts, correct_attempts)
--- UNIQUE(user_id, game_id)
 ```
 
-### 4.3 所有页面均为 Client Component
-
-每个页面文件顶部都有 `"use client"` 指令。原因：大量使用浏览器 API + Supabase 实时交互。
-
-### 4.4 样式：Tailwind v4 Utility-First
-
-- `globals.css` 通过 `@import "tailwindcss"` 引入
-- 全部使用原子类，无组件库
-- 配色：slate 基底，indigo 强调色，rose 用于错误/易错相关 UI
-
-### 4.5 动画：Framer Motion
-
-- `<AnimatePresence>` + `<motion.div>` 用于页面/模式切换过渡
+**客户端**：`src/lib/supabase.ts` 使用 Proxy 懒初始化，防 SSR 构建崩溃。
 
 ---
 
-## 5. 各模块详细说明
-
-### 5.1 首页 Portal (`/` → `src/app/page.tsx`)
-
-**133 行** | 工具列表展示页
-
-- 从 `src/data/tools.ts` 读取工具注册信息，按 category 分组
-- **右上角**：未登录显示"登录"链接，已登录显示用户头像 + 退出按钮
-- 首页不需要登录即可浏览
-
-### 5.2 登录页 (`/login` → `src/app/login/page.tsx`)
-
-**190 行** | 独立登录页
-
-- Google OAuth 一键登录 + 邮箱 Magic Link
-- 接收 `?redirect=xxx` 参数，登录后跳回原页面
-- 用 `<Suspense>` 包裹（Next.js 16 要求 useSearchParams 必须在 Suspense 内）
-
-### 5.3 中文识字 (`/chinese-literacy`)
-
-**已模块化拆分**，包含多个子模式：
-
-#### 文件结构
-
-```
-chinese-literacy/
-├── page.tsx                  # 主页面 (~210 行): 模式路由 + 全局状态
-├── lib/                      # 纯逻辑层
-│   ├── types.ts              # 所有共享类型
-│   ├── shuffle.ts            # Fisher-Yates 洗牌
-│   ├── voice.ts              # TTS/预录音频系统
-│   ├── supabase-progress.ts  # 数据库读写
-│   ├── spaced-repetition.ts  # 遗忘曲线算法
-│   ├── sound-effects.ts      # 音效合成
-│   └── quiz-engine.ts        # 智能出题引擎
-└── components/               # UI 组件层
-    ├── CharCard.tsx           # 字卡 (共享)
-    ├── CompareCard.tsx        # 易混字对比卡
-    ├── WordPairCard.tsx       # 搭配词卡 (词+双字卡)
-    ├── LearnMode.tsx          # 学习模式 (+搭配词/易混字集成)
-    ├── QuizSettings.tsx       # 测验设置
-    ├── QuizPlay.tsx           # 测验答题
-    ├── QuizResults.tsx        # 测验结果
-    ├── ListenQuizSettings.tsx # 九格顺选设置
-    ├── ListenQuizPlay.tsx     # 九格顺选游戏
-    ├── ListenQuizResults.tsx  # 九格顺选结果
-    └── WrongList.tsx          # 易错字表
-```
-
-#### 模式流转
-```
-Menu（主菜单）
-├── Learn（字卡学习）→ LearnDone（学习完成）
-├── QuizSettings（测验设置）→ QuizPlay（答题）→ QuizResult（结果）
-├── ListenQuizSettings → ListenQuiz（九宫格游戏）→ ListenResult（结果）
-└── WrongList（易错字表）→ 可发起专项测验
-```
-
-#### 核心数据结构
-```typescript
-// lib/types.ts
-interface CharRecord {
-  right: number;          // 累计正确次数
-  wrong: number;          // 累计错误次数
-  lastSeen: string;       // ISO 日期
-  nextReview: string;     // ISO 日期
-  interval: number;       // 遗忘曲线等级 (0~5)，映射 EBBINGHAUS_INTERVALS
-}
-```
-
-#### 智能出题算法（`lib/quiz-engine.ts` — `generateQuiz`）
-
-**防作弊优先级设计**：孩子可能故意把已会的字答错，试图让测验变简单。算法通过反转优先级来防止这种策略：
-
-| 优先级 | 类别 | 条件 | 占比 | 防作弊原理 |
-|--------|------|------|------|-----------|
-| 1 | **新字** | 已学但从未答题 | **40%** | 最高优先级，孩子无法回避 |
-| 2 | 到期复习 | nextReview ≤ 今天 | 25% | 遗忘曲线到期 |
-| 3 | 易错字 | 正确率 < 50% 且答题 ≥ 3 | 25% | 桶内按 level 升序排列：level 低的优先出，level 高的降权填充 |
-| 4 | 随机补充 | 其余字 | 10% | 背景维护 |
-
-**出题范围**：不再手动选择分组，自动使用 `progress`（已学字集合）作为出题范围。
-
-**Level 降权机制**：易错字桶内按 level 升序排列 — level 0 的字（真正不会的）优先出题，level 3+ 的字（正在恢复的）排在后面降权填充，不会比从未答题或 level 低的字优先级更高。没有硬性毕业门槛，而是自然降权。
-
-**干扰项选择**（Fix B）：优先选同组字作为干扰项（更具挑战性），不足时从其他组补充，最后从全局字库兜底。
-
-**分配精度**（Fix A）：使用 `Math.floor` + 余数分配，防止 `Math.round` 导致总数溢出。
-
-**去重**（Fix C）：前向+后向交换，确保连续题目不出现同一个字。
-
-#### 遗忘曲线（`lib/spaced-repetition.ts` — `recordAnswerLocal`）
-```
-EBBINGHAUS_INTERVALS = [1, 2, 4, 7, 15, 30] 天
-level:                   0  1  2  3   4   5
-
-答对 → level + 1, nextReview = today + intervals[level]
-答错 → level = max(0, level - 2)  // 柔性衰减，降 2 级而非归零
-         nextReview = today + intervals[newLevel]
-level 5 答对 → mastered = true
-```
-
-#### 易错字表（`components/WrongList.tsx`）
-- 筛选：正确率 < 50% 且答题次数 ≥ 3
-- 展示：字 + 正确率进度条 + 错误/总次数 + 发音按钮
-- 可发起专项测验（只出易错字）
-
-#### 语音系统 (`lib/voice.ts`)
-- **所有音频均为 Azure Speech / Edge TTS 生成** (声音: `zh-CN-XiaoxiaoNeural`，神经网络语音模型)
-- 预录音频存储在 `public/audio/`，通过 `manifest.json` 索引
-- 单音字：`{char}.mp3` — "字，组词1，组词2"
-- 多音字：`{char}-{pinyin}.mp3` — Azure SSML `<phoneme>` 精确控制读音
-- 搭配词：`wp_{word}.mp3` (读词) + `{char}_in_{word}.mp3` (字+词+释义)
-- 带 explain 的字：音频额外包含解释语音
-- Web Speech API 仅作最终 fallback（预录不存在时）
-- 全局中断机制：`_abortId` 递增，切换卡片/题目时立即停止播放
-
-#### 音频生成脚本 (`scripts/`)
-
-| 脚本 | 用途 | TTS 引擎 |
-|------|------|----------|
-| `gen_audio.py` | 生成所有单字发音 MP3 | 单音字: Edge TTS / 多音字: Azure SSML |
-| `gen_explain_audio.py` | 重新生成有 explain 的字 | Edge TTS |
-| `gen_book_audio.py` | 绘本语音 + 字级时间轴 | Azure Speech SDK |
-| `gen_word_pair_audio.py` | 搭配词音频 (读词 + 字在词中) | Azure Speech REST API |
-
-**Azure Speech 配置：**
-```bash
-export AZURE_SPEECH_KEY=<your-key>
-export AZURE_SPEECH_REGION=eastus
-```
-
-- 音效 (`lib/sound-effects.ts`)：AudioContext 合成（答对/答错/胜利）
-
-### 5.4 绘本馆 (`/picture-books` → ~420 行)
-
-**正在重构中（v2 — 点读笔交互模式）**
-
-- **书架**：封面大图卡片 + 年龄标签 + 页数，用 `next/image` 加载封面
-- **阅读器**：两页对开展示（桌面/平板），手机竖屏退回单页
-- **点读交互**：点击文字区域 → 整页朗读 + 字级高亮（类似点读笔）
-- **生词**：阅读中不做内联标记，绘本最后一页统一展示生词汇总表
-- **自动播放**：保留，header 按钮触发，连续朗读全书
-- **控制栏**：已简化，去掉播放/暂停大按钮，只保留翻页 + 页码 + 自动播放
-- RequireAuth 守卫（**已恢复**）
-- 目前 1 本书：《小白兔找萝卜》，使用 SVG 占位插图
-
-**book.json 数据格式（v2）：**
-```typescript
-interface BookPage {
-  text: string;
-  subtitle?: string;
-  image?: string;           // 插图路径（SVG 占位图，后续替换为 AI 生成插图）
-  layout?: "image-top" | "image-full" | "text-only" | "vocab-summary";
-  audio: string;
-  words: WordBoundary[];    // 字级时间轴，用于点读高亮
-  emoji?: string;           // fallback（无 image 时使用）
-  bg?: string;              // fallback 渐变色
-}
-// 最后一页 layout: "vocab-summary" 汇总全书生词
-```
-
-**组件结构：**
-```
-PictureBooksInner → BookShelf | BookReader
-  BookReader → SpreadView (桌面两页对开) | SinglePage (手机单页)
-    PagePanel (单页渲染：插图背景 + 可点击文字浮层)
-    HighlightedText (字级高亮)
-    VocabSummaryPanel (生词汇总页)
-```
-
-**待完成事项：**
-- [x] 浏览器端视觉验证 — 静态资源（SVG 插图、book.json、MP3）均正常加载，dev server 验证通过
-- [x] 恢复 RequireAuth 登录守卫
-- [ ] 用真实 AI 插图替换 SVG 占位图
-- [ ] 绘本生产 pipeline 设计（多 agent 协作）
-
-### 5.5 地产权思维导图 (`/property-law` → 387 行)
-
-- ECharts tree 图表，响应式双端布局
-- RequireAuth 守卫
-
----
-
-## 6. 关键类型定义速查
-
-```typescript
-// src/data/tools.ts
-interface Tool { id, title, description, href, icon: string, category: "law"|"kids"|"other", tags }
-
-// src/data/characters.ts
-interface CharItem { char, readings: CharReading[], groupId, explain? }
-interface CharReading { pinyin, words: string[], emoji }
-interface CharGroup { id, name, chars: CharItem[] }
-
-// chinese-literacy (lib/types.ts)
-interface CharRecord { right, wrong, lastSeen, nextReview, interval }
-// interval 是 level (0~5)，答错降 2 级（柔性衰减）
-
-// src/lib/auth-context.tsx
-interface AuthContextValue {
-  user: User | null;
-  session: Session | null;
-  loading: boolean;
-  signInWithGoogle: () => Promise<void>;
-  signInWithMagicLink: (email: string) => Promise<{ error: string | null }>;
-  signOut: () => Promise<void>;
-}
-
-// Supabase tables
-// profiles: { id (UUID, PK), nickname, avatar_url, created_at, updated_at }
-// game_stats: { user_id, game_id, total_days, streak_days, last_played_at, mastered_count, total_attempts, correct_attempts }
-// literacy_records: { user_id, char, right_count, wrong_count, level, last_seen, next_review, mastered }
-// literacy_progress: { user_id, char, learned_at }
-```
-
----
-
-## 7. 构建与运行
+## 5. 构建与运行
 
 ```bash
-npm install          # 安装依赖
-npm run dev          # 开发模式 (Turbopack) → http://localhost:3000
-npm run build        # 生产构建
-npm start            # 启动生产服务
-npm run lint         # 代码检查
+npm install && npm run dev    # → http://localhost:3000
+npm run build && npm start    # 生产
 ```
 
-### 环境变量（`.env.local`，不入库）
+### 环境变量 (`.env.local`)
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...（anon public key）
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
 ```
-
-> 参见 `.env.example` 了解所需变量列表。
-
-### Supabase 客户端初始化
-
-`src/lib/supabase.ts` 使用 **Proxy 懒初始化**模式：
-- `createClient()` 不在模块顶层执行，而是延迟到首次属性访问时才创建
-- 防止 Next.js 静态页面生成（如 `/_not-found`）时因环境变量不可用而构建崩溃
-- 其他文件照常 `import { supabase }` 使用，无需关心初始化细节
-
-### Supabase 配置
-- **Auth Providers**: Google OAuth + Email (Magic Link)
-- **Google OAuth 回调地址**: `https://<项目ID>.supabase.co/auth/v1/callback`
-- **RLS**: 所有表已启用 Row Level Security
 
 ### Vercel 部署
-
-项目通过 GitHub 仓库自动部署到 Vercel。首次部署或更换环境需配置：
-
-1. **Vercel 环境变量**：在 Vercel Dashboard → Settings → Environment Variables 添加：
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - Environment 选择 All（Production + Preview + Development）
-
-2. **Supabase OAuth 重定向**：在 Supabase Dashboard → Authentication → URL Configuration：
-   - **Site URL** 设置为 Vercel 线上地址（如 `https://ppweb-xxx.vercel.app`）
-   - **Redirect URLs** 添加 `https://ppweb-xxx.vercel.app/**`（通配所有子路径）
-   - 本地开发保留 `http://localhost:3000/**`
-
-> ⚠️ 修改 Vercel 环境变量后需手动触发 Redeploy 才生效。
+- 环境变量在 Vercel Dashboard 添加
+- Supabase Redirect URLs 添加 `https://your-domain/**`
+- 修改环境变量后需手动 Redeploy
 
 ---
 
-## 8. 开发约定与注意事项
+## 6. 开发约定
 
-### 8.1 新增工具的标准流程
+### 新增工具
+1. `src/data/tools.ts` 添加条目
+2. `src/app/<id>/page.tsx`，顶部 `"use client"`
+3. `RequireAuth` 包裹
+4. 如需数据表，在 Supabase 创建（RLS + `user_id`）
 
-1. 在 `src/data/tools.ts` 添加工具条目
-2. 创建 `src/app/<tool-id>/page.tsx`，顶部加 `"use client"`
-3. 用 `RequireAuth` 包裹页面组件
-4. 如需存储用户数据，在 Supabase 创建独立表（如 `math_records`）
-5. 首页自动展示，无需额外修改
+### 编码风格
+- Tailwind 原子类，无组件库
+- 配色：slate 基底，indigo 强调，rose 错误
+- 所有页面 Client Component（`"use client"`）
+- `useSearchParams()` 必须在 `<Suspense>` 内
 
-### 8.2 新增游戏数据表的规范
-
-每个游戏有独立的 Supabase 表，按游戏形态设计字段：
-- 表名格式：`<game>_records`（如 `literacy_records`, `math_records`）
-- 必须包含 `user_id UUID REFERENCES auth.users(id)` 字段
-- 必须启用 RLS，策略：用户只能访问自己的数据
-- 排行榜数据统一写入 `game_stats` 表，用 `game_id` 区分
-
-### 8.3 编码风格
-
-- 每个工具页面为单文件组件（子组件、hooks、工具函数都在同一文件）
-- 共享基础设施放 `src/lib/`
-- CSS: 纯 Tailwind 原子类
-- 所有游戏页面用 `RequireAuth` 包裹
-
-### 8.4 Next.js 16 注意事项
-
-- **Turbopack** 默认构建器
-- **App Router only**
-- `useSearchParams()` 必须在 `<Suspense>` 内使用
-- 编码前建议阅读: `node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md`
-
-### 8.5 已知的技术债/改进空间
-
-- ~~`chinese-literacy/page.tsx` 有 2133 行，可考虑拆分~~ ✅ 已拆分为 18 个模块文件
-- 绘本馆只有 1 本书，使用 SVG 占位插图，待替换为 AI 生成插图
-- 绘本馆 RequireAuth 临时跳过（搜索 `TODO: restore RequireAuth`）
-- `game_stats` 排行榜表已建好但功能未实现（Phase 3）
-- 无单元测试 / E2E 测试
-- 无 CI/CD 配置
+### 数据表规范
+- 表名：`<game>_records`
+- 必须 `user_id UUID REFERENCES auth.users(id)` + RLS
+- 排行榜统一 `game_stats` 表
 
 ---
 
-## 9. Git 提交历史摘要 (近期)
+## 7. 快速索引
 
-```
-5287b0c fix: harden Supabase proxy against SSR symbol probing
-af9eab2 fix: lazy-init Supabase client to fix Vercel build failure
-581bb2b feat: 用户系统 + 智能出题 + 易错字表
-255e086 docs: 添加项目框架文档 PROJECT_GUIDE.md
-0f79897 feat: 优化出题范围选择，快捷按钮+单击微调
-66ac75d feat: 测验结果页显示出题范围和测验内容总结
-4410ea0 feat: 新增听音选字九宫格游戏模式
-f708637 feat: 统一抽象字语音为预录音频，翻页停止播放
-8376c5d feat: spaced repetition quiz + abstract char explanations
-05e0db3 feat: picture book reader with audio narration, word highlighting, vocab popups
-```
-
-提交风格: `feat:` / `fix:` / `chore:` / `docs:` 前缀。
-
----
-
-## 10. 快速索引
-
-| 需求 | 找哪个文件 |
-|------|-----------|
-| 添加新工具到首页 | `src/data/tools.ts` |
-| 修改首页布局/头像 | `src/app/page.tsx` |
-| 修改登录页 | `src/app/login/page.tsx` |
-| 修改认证逻辑 | `src/lib/auth-context.tsx` |
-| 修改登录守卫 | `src/lib/require-auth.tsx` |
-| 修改数据迁移 | `src/lib/migrate-local-data.ts` |
-| Supabase 客户端配置 | `src/lib/supabase.ts`（懒初始化 Proxy）+ `.env.local` |
-| 修改全局样式/字体 | `src/app/globals.css` + `src/app/layout.tsx` |
-| 添加/修改汉字数据 | `src/data/characters.ts` |
-| 修改识字学习/测验逻辑 | `src/app/chinese-literacy/page.tsx` (模式路由) + `components/` |
-| 修改智能出题算法 | `src/app/chinese-literacy/lib/quiz-engine.ts`，搜索 `generateQuiz` |
-| 修改遗忘曲线算法 | `src/app/chinese-literacy/lib/spaced-repetition.ts` |
-| 修改易错字表 | `src/app/chinese-literacy/components/WrongList.tsx` |
-| 修改语音/TTS 系统 | `src/app/chinese-literacy/lib/voice.ts` |
-| 修改音效 | `src/app/chinese-literacy/lib/sound-effects.ts` |
-| 修改识字数据持久化 | `src/app/chinese-literacy/lib/supabase-progress.ts` |
-| 修改识字共享类型 | `src/app/chinese-literacy/lib/types.ts` |
-| 修改绘本功能 | `src/app/picture-books/page.tsx` |
-| 修改思维导图 | `src/app/property-law/page.tsx` |
-| 新增游戏数据表 | Supabase SQL Editor，参考 `literacy_records` 表结构 |
-| 排行榜功能（待开发） | `game_stats` 表已建好，需实现前端 |
+| 需求 | 文件 |
+|------|------|
+| 首页布局 | `src/app/page.tsx` |
+| 登录/注册/密码重置 | `src/app/login/page.tsx` → 详见 `src/lib/AUTH.md` |
+| 认证逻辑 | `src/lib/auth-context.tsx` |
+| 工具注册 | `src/data/tools.ts` |
+| 汉字数据 | `src/data/characters.ts` |
+| 识字模块全部 | `src/app/chinese-literacy/` → 详见 `MODULE.md` |
+| 绘本馆 | `src/app/picture-books/` → 详见 `MODULE.md` |
+| 地产权 | `src/app/property-law/` → 详见 `MODULE.md` |
+| Supabase 客户端 | `src/lib/supabase.ts` |
+| 全局样式 | `src/app/globals.css` |
 | Next.js 配置 | `next.config.mjs` |
 
 ---
 
-## 11. 未来规划
+## 8. 路线图
 
 | 阶段 | 功能 | 状态 |
 |------|------|------|
-| Phase 1 | 用户系统 (Supabase Auth + DB) | ✅ 已完成 |
-| Phase 2 | 智能出题 + 遗忘曲线 + 易错字表 | ✅ 已完成 |
-| Phase 2.7 | 识字模块优化 — 防作弊出题算法 + 模块化拆分 | ✅ 已完成 |
-| Phase 2.8 | 识字优化 — 易混字对比卡 + 搭配词卡 + 九格顺选智能出题 | ✅ 已完成 |
-| Phase 2.5 | 绘本馆 v2 — 点读笔交互 + 对开布局 | 🔧 开发中（代码已写完，待浏览器验证） |
-| Phase 2.6 | 绘本生产 Pipeline — 多 agent 故事生成 + AI 插图 + TTS 配音 | 📋 已设计，待实施 |
-| Phase 3 | 排行榜 (打卡天数/掌握数量/正确率，周榜/月榜/总榜) | 📋 待开发，`game_stats` 表已预留 |
-| Phase 4+ | 数学游戏、阅读游戏等新模块 | 📋 规划中 |
+| Phase 1 | 用户系统 (Supabase Auth + DB) | ✅ |
+| Phase 2 | 智能出题 + 遗忘曲线 + 易错字表 | ✅ |
+| Phase 2.7 | 防作弊出题 + 模块化拆分 | ✅ |
+| Phase 2.8 | 易混字对比卡 + 搭配词卡 + 九格顺选智能出题 | ✅ |
+| Phase 2.9 | 邮箱密码注册登录 + 密码重置 | ✅ |
+| Phase 2.5 | 绘本馆 v2 — 点读笔交互 | 🔧 代码完成 |
+| Phase 2.6 | 绘本生产 Pipeline | 📋 待实施 |
+| Phase 3 | 排行榜 | 📋 表已建 |
+| Phase 4+ | 数学/阅读等新模块 | 📋 规划中 |
+
+---
+
+## 9. Git 提交风格
+
+`feat:` / `fix:` / `chore:` / `docs:` / `assets:` 前缀
