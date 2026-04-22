@@ -5,6 +5,39 @@ import { Volume2 } from "lucide-react";
 import type { CharItem } from "@/data/characters";
 import { speakChar } from "../lib/voice";
 
+/**
+ * Pinyin initial consonants (声母), longest first for correct prefix matching.
+ * Standard 23 initials including zh/ch/sh and y/w.
+ */
+const PINYIN_INITIALS = [
+  "zh", "ch", "sh",
+  "b", "p", "m", "f", "d", "t", "n", "l",
+  "g", "k", "h", "j", "q", "x", "r",
+  "z", "c", "s", "y", "w",
+];
+
+/** Split pinyin into initial (声母) and final (韵母). Tone marks stay on final. */
+export function splitPinyin(pinyin: string): { initial: string; final: string } {
+  const lower = pinyin.toLowerCase();
+  for (const ini of PINYIN_INITIALS) {
+    if (lower.startsWith(ini)) {
+      return { initial: pinyin.slice(0, ini.length), final: pinyin.slice(ini.length) };
+    }
+  }
+  return { initial: "", final: pinyin };
+}
+
+/** Colored pinyin display: 声母 rose (warm), 韵母 sky (cool). */
+export function PinyinText({ pinyin, className = "" }: { pinyin: string; className?: string }) {
+  const { initial, final } = splitPinyin(pinyin);
+  return (
+    <span className={className}>
+      {initial && <span className="text-rose-500">{initial}</span>}
+      <span className="text-sky-600">{final}</span>
+    </span>
+  );
+}
+
 export function PixelEmoji({ emoji, size = "md" }: { emoji: string; size?: "sm" | "md" | "lg" }) {
   const sizeMap = { sm: 40, md: 56, lg: 80 };
   const dim = sizeMap[size];
@@ -34,9 +67,9 @@ export function CharCard({ item, compact = false }: { item: CharItem; compact?: 
         {item.readings.map((r, i) => <PixelEmoji key={i} emoji={r.emoji} size={compact ? "sm" : "lg"} />)}
       </div>
 
-      <div className={`flex flex-wrap justify-center gap-x-2 text-slate-500 font-medium ${compact ? "text-sm" : "text-lg sm:text-xl"}`}>
+      <div className={`flex flex-wrap justify-center gap-x-3 font-bold tracking-wide ${compact ? "text-lg" : "text-2xl sm:text-3xl"}`}>
         {item.readings.map((r, i) => (
-          <span key={i}>{r.pinyin}</span>
+          <PinyinText key={i} pinyin={r.pinyin} />
         ))}
       </div>
 
@@ -47,7 +80,7 @@ export function CharCard({ item, compact = false }: { item: CharItem; compact?: 
       <div className={`flex flex-col items-center ${compact ? "gap-1" : "gap-1.5"}`}>
         {item.readings.map((r, i) => (
           <div key={i} className={`flex items-center gap-2 ${compact ? "text-sm" : "text-lg sm:text-xl"}`}>
-            <span className="text-slate-400 text-xs font-mono">{r.pinyin}</span>
+            <PinyinText pinyin={r.pinyin} className="text-sm font-bold" />
             <div className="flex gap-2 text-indigo-600 font-medium">
               {r.words.map((w, wi) => (
                 <span key={wi}>{w}</span>

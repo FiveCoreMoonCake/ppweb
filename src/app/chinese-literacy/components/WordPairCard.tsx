@@ -5,6 +5,7 @@ import { Volume2 } from "lucide-react";
 import { allChars, type CharItem } from "@/data/characters";
 import type { WordPair } from "../lib/word-pairs";
 import { speakWord, speakCharInWord } from "../lib/voice";
+import { PinyinText } from "./CharCard";
 
 function PairCharCard({
   item,
@@ -39,9 +40,14 @@ function PairCharCard({
       {/* Character */}
       <p className={`text-5xl font-bold ${colors.text}`}>{item.char}</p>
 
-      {/* Pinyin */}
-      <p className="text-sm text-slate-500 font-medium">
-        {item.readings.map((r) => r.pinyin).join(" / ")}
+      {/* Pinyin — 声母红 / 韵母蓝 */}
+      <p className="text-lg font-bold tracking-wide flex flex-wrap justify-center gap-x-2">
+        {item.readings.map((r, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <span className="text-slate-300">/</span>}
+            <PinyinText pinyin={r.pinyin} />
+          </React.Fragment>
+        ))}
       </p>
 
       {/* Meaning hint */}
