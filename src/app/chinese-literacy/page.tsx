@@ -18,6 +18,15 @@ import { ListenQuizSettings } from "./components/ListenQuizSettings";
 import { ListenQuizPlay } from "./components/ListenQuizPlay";
 import { ListenQuizResults } from "./components/ListenQuizResults";
 import { WrongList } from "./components/WrongList";
+import { QuizHistory } from "./components/QuizHistory";
+import {
+  loadQuizHistory,
+  loadListenHistory,
+  saveQuizHistory,
+  saveListenHistory,
+  type QuizHistoryEntry,
+  type ListenHistoryEntry,
+} from "./lib/quiz-history";
 
 function ChineseLiteracyInner() {
   const { user } = useAuth();
@@ -43,8 +52,20 @@ function ChineseLiteracyInner() {
   const [listenGrid, setListenGrid] = useState<CharItem[]>([]);
   const [listenRound, setListenRound] = useState(0);
 
+  // History state
+  const [quizHistory, setQuizHistory] = useState<QuizHistoryEntry[]>([]);
+  const [listenHistory, setListenHistory] = useState<ListenHistoryEntry[]>([]);
+  const [historyQuizIdx, setHistoryQuizIdx] = useState(0);
+  const [historyListenIdx, setHistoryListenIdx] = useState(0);
+
   useEffect(() => setIsClient(true), []);
   useVoiceInit();
+
+  // Load history from localStorage on mount
+  useEffect(() => {
+    setQuizHistory(loadQuizHistory(userId));
+    setListenHistory(loadListenHistory(userId));
+  }, [userId]);
 
   // Load data from Supabase on mount
   useEffect(() => {
@@ -98,7 +119,11 @@ function ChineseLiteracyInner() {
     return (
       <QuizPlay
         questions={quizQuestions}
-        onFinish={(a) => { setQuizAnswers(a); setMode("quiz-results"); }}
+        onFinish={(a) => {
+          setQuizAnswers(a);
+          setQuizHistory(saveQuizHistory(userId, a));
+          setMode("quiz-results");
+        }}
         onBack={() => setMode("home")}
         records={records}
         userId={userId}
@@ -112,7 +137,12 @@ function ChineseLiteracyInner() {
       <ListenQuizPlay
         key={listenRound}
         progress={progress}
-        onFinish={(r, g) => { setListenResult(r); setListenGrid(g); setMode("listen-quiz-results"); }}
+        onFinish={(r, g) => {
+          setListenResult(r);
+          setListenGrid(g);
+          setListenHistory(saveListenHistory(userId, r, g));
+          setMode("listen-quiz-results");
+        }}
         onBack={() => setMode("home")}
         records={records}
         userId={userId}
@@ -121,6 +151,35 @@ function ChineseLiteracyInner() {
     );
   if (mode === "listen-quiz-results" && listenResult)
     return <ListenQuizResults key={listenRound} result={listenResult} grid={listenGrid} onRetry={retryListenQuiz} onBack={() => setMode("home")} />;
+  if (mode === "history")
+    return (
+      <QuizHistory
+        quizHistory={quizHistory}
+        listenHistory={listenHistory}
+        onBack={() => setMode("home")}
+        onOpenQuiz={(i) => { setHistoryQuizIdx(i); setMode("history-quiz-view"); }}
+        onOpenListen={(i) => { setHistoryListenIdx(i); setMode("history-listen-view"); }}
+      />
+    );
+  if (mode === "history-quiz-view" && quizHistory[historyQuizIdx])
+    return (
+      <QuizResults
+        key={`hist-q-${quizHistory[historyQuizIdx].timestamp}`}
+        answers={quizHistory[historyQuizIdx].answers}
+        onBack={() => setMode("history")}
+        backLabel="返回历史"
+      />
+    );
+  if (mode === "history-listen-view" && listenHistory[historyListenIdx])
+    return (
+      <ListenQuizResults
+        key={`hist-l-${listenHistory[historyListenIdx].timestamp}`}
+        result={listenHistory[historyListenIdx].result}
+        grid={listenHistory[historyListenIdx].grid}
+        onBack={() => setMode("history")}
+        backLabel="返回历史"
+      />
+    );
   if (mode === "wrongList")
     return (
       <WrongList
@@ -162,10 +221,10 @@ function ChineseLiteracyInner() {
         )}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm sm:max-w-lg">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 w-full max-w-sm sm:max-w-2xl">
         <button
           onClick={() => setMode("learn")}
-          className="flex-1 py-5 rounded-2xl bg-white border-2 border-emerald-200 shadow-sm hover:shadow-md hover:border-emerald-400 active:scale-[0.97] transition-all text-center"
+          className="py-5 rounded-2xl bg-white border-2 border-emerald-200 shadow-sm hover:shadow-md hover:border-emerald-400 active:scale-[0.97] transition-all text-center"
         >
           <span className="text-3xl block mb-2">🎴</span>
           <span className="font-bold text-lg text-emerald-700">学习模式</span>
@@ -173,7 +232,7 @@ function ChineseLiteracyInner() {
         </button>
         <button
           onClick={() => setMode("quiz-settings")}
-          className="flex-1 py-5 rounded-2xl bg-white border-2 border-indigo-200 shadow-sm hover:shadow-md hover:border-indigo-400 active:scale-[0.97] transition-all text-center"
+          className="py-5 rounded-2xl bg-white border-2 border-indigo-200 shadow-sm hover:shadow-md hover:border-indigo-400 active:scale-[0.97] transition-all text-center"
         >
           <span className="text-3xl block mb-2">🧩</span>
           <span className="font-bold text-lg text-indigo-700">测验模式</span>
@@ -181,7 +240,7 @@ function ChineseLiteracyInner() {
         </button>
         <button
           onClick={() => setMode("listen-quiz-settings")}
-          className="flex-1 py-5 rounded-2xl bg-white border-2 border-amber-200 shadow-sm hover:shadow-md hover:border-amber-400 active:scale-[0.97] transition-all text-center"
+          className="py-5 rounded-2xl bg-white border-2 border-amber-200 shadow-sm hover:shadow-md hover:border-amber-400 active:scale-[0.97] transition-all text-center"
         >
           <span className="text-3xl block mb-2">🎮</span>
           <span className="font-bold text-lg text-amber-700">九格顺选</span>
@@ -189,11 +248,19 @@ function ChineseLiteracyInner() {
         </button>
         <button
           onClick={() => setMode("wrongList")}
-          className="flex-1 py-5 rounded-2xl bg-white border-2 border-rose-200 shadow-sm hover:shadow-md hover:border-rose-400 active:scale-[0.97] transition-all text-center"
+          className="py-5 rounded-2xl bg-white border-2 border-rose-200 shadow-sm hover:shadow-md hover:border-rose-400 active:scale-[0.97] transition-all text-center"
         >
           <span className="text-3xl block mb-2">📋</span>
           <span className="font-bold text-lg text-rose-700">易错字表</span>
           <span className="block text-xs text-slate-400 mt-1">专项复习易错字</span>
+        </button>
+        <button
+          onClick={() => setMode("history")}
+          className="col-span-2 sm:col-span-1 py-5 rounded-2xl bg-white border-2 border-sky-200 shadow-sm hover:shadow-md hover:border-sky-400 active:scale-[0.97] transition-all text-center"
+        >
+          <span className="text-3xl block mb-2">🕑</span>
+          <span className="font-bold text-lg text-sky-700">历史结果</span>
+          <span className="block text-xs text-slate-400 mt-1">查看最近 3 次成绩</span>
         </button>
       </div>
 

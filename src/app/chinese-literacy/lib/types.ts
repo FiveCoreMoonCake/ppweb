@@ -57,4 +57,7 @@ export type Mode =
   | "listen-quiz-settings"
   | "listen-quiz-play"
   | "listen-quiz-results"
-  | "wrongList";
+  | "wrongList"
+  | "history"
+  | "history-quiz-view"
+  | "history-listen-view";

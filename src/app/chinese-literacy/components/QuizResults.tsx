@@ -13,10 +13,12 @@ export function QuizResults({
   answers,
   onRetry,
   onBack,
+  backLabel = "返回",
 }: {
   answers: QuizAnswer[];
-  onRetry: () => void;
+  onRetry?: () => void;
   onBack: () => void;
+  backLabel?: string;
 }) {
   const correct = answers.filter((a) => a.isCorrect).length;
   const total = answers.length;
@@ -120,17 +122,19 @@ export function QuizResults({
         </div>
 
         <div className="flex gap-3">
-          <button
-            onClick={onRetry}
-            className="flex-1 py-3.5 rounded-xl bg-indigo-500 text-white font-bold flex items-center justify-center gap-2 hover:bg-indigo-600 active:scale-[0.98] transition-all"
-          >
-            <RotateCcw className="w-5 h-5" /> 再来一次
-          </button>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="flex-1 py-3.5 rounded-xl bg-indigo-500 text-white font-bold flex items-center justify-center gap-2 hover:bg-indigo-600 active:scale-[0.98] transition-all"
+            >
+              <RotateCcw className="w-5 h-5" /> 再来一次
+            </button>
+          )}
           <button
             onClick={onBack}
             className="flex-1 py-3.5 rounded-xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 active:scale-[0.98] transition-all"
           >
-            返回
+            {backLabel}
           </button>
         </div>
       </div>
