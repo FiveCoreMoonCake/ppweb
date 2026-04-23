@@ -1,7 +1,7 @@
 # 中文识字模块
 
 > 路由: `/chinese-literacy` | 面向学龄前儿童
-> 字卡学习 + 智能测验 + 九宫格游戏 + 易混字对比 + 搭配词卡 + 易错字表
+> 字卡学习 + 智能测验 + 九宫格游戏 + 易混字对比 + 搭配词卡 + 易错字表 + 历史结果
 
 ---
 
@@ -9,40 +9,43 @@
 
 ```
 chinese-literacy/
-├── page.tsx                    # 主页面 (~210行): 模式路由 + 全局状态
+├── page.tsx                    # 主页面 (~240行): 模式路由 + 全局状态 + 历史加载
 ├── MODULE.md                   # 本文档
 ├── lib/                        # 纯逻辑层
-│   ├── types.ts                # 共享类型 (CharRecord, QuizQuestion 等)
+│   ├── types.ts                # 共享类型 (CharRecord, QuizQuestion, Mode 等)
 │   ├── shuffle.ts              # Fisher-Yates 洗牌
 │   ├── voice.ts                # TTS/预录音频系统
 │   ├── confusables.ts          # 易混字对比数据 (35组)
-│   ├── word-pairs.ts           # 搭配词数据 (14组，抽象字/拆开无意义字)
+│   ├── word-pairs.ts           # 搭配词数据 (14组)
 │   ├── supabase-progress.ts    # Supabase 数据持久化
+│   ├── quiz-history.ts         # 测验/九格历史记录 (localStorage, 最近3次)
 │   ├── spaced-repetition.ts    # 遗忘曲线算法
 │   ├── sound-effects.ts        # 音效合成
 │   └── quiz-engine.ts          # 智能出题引擎
 └── components/                 # UI 组件层
-    ├── CharCard.tsx             # 字卡 (Emoji + 朗读)
-    ├── CompareCard.tsx          # 易混字对比卡 (并排对比 + 记忆提示)
-    ├── WordPairCard.tsx         # 搭配词卡 (词+双字卡 + 点击读详细)
+    ├── CharCard.tsx             # 字卡 + 彩色拼音 (声母红/韵母蓝) + splitPinyin
+    ├── CompareCard.tsx          # 易混字对比卡
+    ├── WordPairCard.tsx         # 搭配词卡
     ├── LearnMode.tsx            # 学习模式 (翻卡 + 分组导航 + 搭配词/易混字)
     ├── QuizSettings.tsx         # 测验设置
-    ├── QuizPlay.tsx             # 测验答题 (2×2 选项)
-    ├── QuizResults.tsx          # 测验结果
+    ├── QuizPlay.tsx             # 测验答题 (2×2 选项 + 前后翻页 + 错题门禁)
+    ├── QuizResults.tsx          # 测验结果 (支持只读模式)
     ├── ListenQuizSettings.tsx   # 九格顺选设置
     ├── ListenQuizPlay.tsx       # 九格顺选 3×3 游戏
-    ├── ListenQuizResults.tsx    # 九格顺选结果
+    ├── ListenQuizResults.tsx    # 九格顺选结果 (支持只读模式)
+    ├── QuizHistory.tsx          # 历史结果列表 (tab: 测验/九格)
     └── WrongList.tsx            # 易错字表 + 专项练习
 ```
 
 ## 模式流转
 
 ```
-Menu（主菜单）
-├── Learn（字卡学习）→ LearnDone（学习完成）
-├── QuizSettings（测验设置）→ QuizPlay（答题）→ QuizResult（结果）
-├── ListenQuizSettings → ListenQuiz（九宫格游戏）→ ListenResult（结果）
-└── WrongList（易错字表）→ 可发起专项测验
+Home（首页 5 张卡片）
+├── 🎴 学习模式 Learn
+├── 🧩 测验模式 QuizSettings → QuizPlay → QuizResults →历史
+├── 🎮 九格顺选 ListenQuizSettings → ListenQuizPlay → ListenQuizResults →历史
+├── 📋 易错字表 WrongList → 可发起专项测验
+└── 🕑 历史结果 History → 只读 Results（返回历史）
 ```
 
 ---
@@ -159,3 +162,46 @@ AudioContext 合成：答对/答错/胜利，无外部文件。
 ## 易错字表 (`WrongList.tsx`)
 
 筛选正确率 < 50% 且答题 ≥ 3 次的字，可发起专项测验。
+
+---
+
+## 测验答题增强 (`QuizPlay.tsx`)
+
+**双向翻页**：
+- 底部"上一题 / 下一题"按钮 + 键盘 ← →
+- 进度条 = 已答题数 / 总数（不再因当前题答完推进）
+- 答题状态按题目索引持久化（`answerMap[]` + `tappedMap[]`）
+- 回看已答题时不可修改（防刷 SR 数据），自动播报只在**首次**访问未答题时触发
+
+**错题强制听读音门禁**：
+- 答错后"下一题"按钮置灰，必须**点过错选字和正确字**两张卡（听过读音）才会激活
+- 两张卡有琥珀色脉冲描边提示需点击
+- 提示文案变黄："点一点两个字，听听读音再继续"
+- 答对则无门禁，按钮直接绿色可用
+
+## 历史结果 (`QuizHistory.tsx` + `lib/quiz-history.ts`)
+
+**存储策略**：
+- localStorage，key 格式 `cl:quizHistory:{userId}` / `cl:listenHistory:{userId}`
+- 每种模式**最多保留 3 次**（FIFO 淘汰）
+- 测验/九格完成时 `onFinish` 自动写入，失败静默降级
+
+**数据类型**：
+```typescript
+interface QuizHistoryEntry { timestamp: number; answers: QuizAnswer[] }
+interface ListenHistoryEntry { timestamp: number; result: ListenQuizResult; grid: CharItem[] }
+```
+
+**查看**：
+- 首页"🕑 历史结果"卡片进入，tab 切换测验 / 九格顺选
+- 列表项显示相对时间（今天/昨天/日期）、得分 或 错误次数、错字徽章预览
+- 点列表项 → 复用 `QuizResults` / `ListenQuizResults` 组件
+- **只读模式**：两个 Results 组件均支持可选 `onRetry?` + `backLabel?` props，未传 `onRetry` 时隐藏"再来一次"按钮
+
+## 拼音显示 (`CharCard.tsx` — `splitPinyin` + `PinyinText`)
+
+从 `CharCard` 导出供所有字卡组件复用：
+- `PINYIN_INITIALS` — 23 个声母数组，按长度降序（zh/ch/sh 优先于 z/c/s）
+- `splitPinyin(pinyin)` — 最长前缀匹配拆分 `{initial, final}`，声调保留在韵母
+- `<PinyinText pinyin className?>` — 声母 `text-rose-500`、韵母 `text-sky-600`
+- 应用于 `CharCard`、`WordPairCard`、`CompareCard` 三处

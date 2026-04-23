@@ -1,7 +1,7 @@
 # PP 学习工具箱 - 项目框架文档
 
 > AI Agent 快速上手指南。各模块详情见对应 MODULE.md / AUTH.md，按需阅读。
-> 最后更新: 2026-04-21
+> 最后更新: 2026-04-23
 
 ---
 
@@ -126,6 +126,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
 - 表名：`<game>_records`
 - 必须 `user_id UUID REFERENCES auth.users(id)` + RLS
 - 排行榜统一 `game_stats` 表
+
+### 本地存储
+- 非关键数据（如识字模块的"最近 3 次测验结果"）可用 localStorage
+- Key 格式：`<module>:<feature>:{userId}`
+- 写入必须 try/catch 静默降级（quota 或序列化失败不影响主流程）
 
 ---
 
