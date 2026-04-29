@@ -7,7 +7,7 @@ import { RequireAuth } from "@/lib/require-auth";
 
 import type { Mode, CharRecord, QuizQuestion, QuizAnswer, ListenQuizResult } from "./lib/types";
 import { useVoiceInit } from "./lib/voice";
-import { loadProgressFromDB, loadRecordsFromDB } from "./lib/supabase-progress";
+import { loadProgressFromDB, loadRecordsFromDB, clearProgressChars } from "./lib/supabase-progress";
 import { generateQuiz } from "./lib/quiz-engine";
 
 import { LearnMode } from "./components/LearnMode";
@@ -77,6 +77,13 @@ function ChineseLiteracyInner() {
         loadRecordsFromDB(userId),
       ]);
       if (cancelled) return;
+      // One-time cleanup of orphan progress entries (chars no longer in dataset).
+      const validSet = new Set(allChars.map((c) => c.char));
+      const orphans = [...prog].filter((c) => !validSet.has(c));
+      if (orphans.length > 0) {
+        clearProgressChars(userId, orphans).catch(() => {});
+        for (const c of orphans) prog.delete(c);
+      }
       setProgress(prog);
       setRecords(recs);
       setDataLoaded(true);

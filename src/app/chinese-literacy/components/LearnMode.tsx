@@ -11,6 +11,9 @@ import { getPrimaryWordPair } from "../lib/word-pairs";
 import { CharCard } from "./CharCard";
 import { CompareCard } from "./CompareCard";
 import { WordPairCard } from "./WordPairCard";
+import { allChars } from "@/data/characters";
+
+const _validCharSet = new Set(allChars.map((c) => c.char));
 
 export function LearnMode({ onBack, userId }: { onBack: () => void; userId: string }) {
   const [groupIdx, setGroupIdx] = useState(0);
@@ -20,7 +23,17 @@ export function LearnMode({ onBack, userId }: { onBack: () => void; userId: stri
   const [showCompare, setShowCompare] = useState(false);
 
   useEffect(() => {
-    loadProgressFromDB(userId).then(setLearned);
+    loadProgressFromDB(userId).then(async (loaded) => {
+      // Clean up legacy orphans: chars in DB that are no longer in the dataset
+      // (caused by an old bug that auto-marked word-pair partners not present
+      // in characters.ts, e.g. “认” / “害”).
+      const orphans = [...loaded].filter((c) => !_validCharSet.has(c));
+      if (orphans.length > 0) {
+        await clearProgressChars(userId, orphans);
+        for (const c of orphans) loaded.delete(c);
+      }
+      setLearned(loaded);
+    });
   }, [userId]);
 
   const group = charGroups[groupIdx];
@@ -43,7 +56,9 @@ export function LearnMode({ onBack, userId }: { onBack: () => void; userId: stri
     const charsToLearn = [card.char];
     if (wordPair) {
       const partner = wordPair.chars.find((c) => c !== card.char);
-      if (partner) charsToLearn.push(partner);
+      // Only mark partner if it actually exists in the dataset — prevents
+      // orphan progress entries (“认”, “害” 等 不存在的伙伴字).
+      if (partner && _validCharSet.has(partner)) charsToLearn.push(partner);
     }
     setLearned((prev) => {
       if (charsToLearn.every((c) => prev.has(c))) return prev;

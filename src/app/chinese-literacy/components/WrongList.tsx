@@ -3,10 +3,12 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Volume2, ArrowLeft } from "lucide-react";
-import { allChars, type CharItem } from "@/data/characters";
+import { allChars, charGroups, type CharItem } from "@/data/characters";
 import type { CharRecord } from "../lib/types";
 import { speakChar } from "../lib/voice";
 import { getWrongChars } from "../lib/quiz-engine";
+
+const groupName = (id: string) => charGroups.find((g) => g.id === id)?.name ?? id;
 
 export function WrongList({
   records,
@@ -87,6 +89,12 @@ export function WrongList({
                     <span className="text-4xl font-bold text-slate-800">
                       {wc.char}
                     </span>
+
+                    {item && (
+                      <span className="text-[11px] text-slate-400 font-medium -mt-1">
+                        {groupName(item.groupId)}
+                      </span>
+                    )}
 
                     {item && (
                       <div className="flex flex-wrap justify-center gap-1 text-xs text-slate-500 font-mono">
