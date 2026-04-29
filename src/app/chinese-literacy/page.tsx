@@ -51,6 +51,7 @@ function ChineseLiteracyInner() {
   const [listenResult, setListenResult] = useState<ListenQuizResult | null>(null);
   const [listenGrid, setListenGrid] = useState<CharItem[]>([]);
   const [listenRound, setListenRound] = useState(0);
+  const [lastListenGroupIds, setLastListenGroupIds] = useState<string[] | undefined>(undefined);
 
   // History state
   const [quizHistory, setQuizHistory] = useState<QuizHistoryEntry[]>([]);
@@ -98,15 +99,16 @@ function ChineseLiteracyInner() {
     startQuiz(lastQuizCount, lastQuizGroupIds);
   }, [lastQuizCount, lastQuizGroupIds, startQuiz]);
 
-  const startListenQuiz = useCallback(() => {
+  const startListenQuiz = useCallback((groupIds?: string[]) => {
     setListenResult(null);
     setListenRound((r) => r + 1);
+    setLastListenGroupIds(groupIds);
     setMode("listen-quiz-play");
   }, []);
 
   const retryListenQuiz = useCallback(() => {
-    startListenQuiz();
-  }, [startListenQuiz]);
+    startListenQuiz(lastListenGroupIds);
+  }, [startListenQuiz, lastListenGroupIds]);
 
   if (!isClient || !dataLoaded) {
     return <div className="h-screen bg-slate-50 flex items-center justify-center text-slate-400">加载中...</div>;
@@ -137,6 +139,7 @@ function ChineseLiteracyInner() {
       <ListenQuizPlay
         key={listenRound}
         progress={progress}
+        groupIds={lastListenGroupIds}
         onFinish={(r, g) => {
           setListenResult(r);
           setListenGrid(g);
@@ -235,7 +238,7 @@ function ChineseLiteracyInner() {
           className="py-5 rounded-2xl bg-white border-2 border-indigo-200 shadow-sm hover:shadow-md hover:border-indigo-400 active:scale-[0.97] transition-all text-center"
         >
           <span className="text-3xl block mb-2">🧩</span>
-          <span className="font-bold text-lg text-indigo-700">测验模式</span>
+          <span className="font-bold text-lg text-indigo-700">听音选字</span>
           <span className="block text-xs text-slate-400 mt-1">听音辨字，四选一</span>
         </button>
         <button

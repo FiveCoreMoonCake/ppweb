@@ -148,12 +148,12 @@ export function generateQuiz(
     // Priority 3: other groups
     for (const c of otherGroup) { if (distractors.length >= 3) break; distractors.push(c); }
 
-    // Global fallback if selected range is too small
+    // Range-only fallback (do not leak chars outside selected range)
     if (distractors.length < 3) {
-      const globalFallback = shuffle(allChars.filter(
+      const rangeFallback = shuffle(chars.filter(
         (c) => c.char !== entry.item.char && !distractors.some((d) => d.char === c.char)
       ));
-      for (const c of globalFallback) { if (distractors.length >= 3) break; distractors.push(c); }
+      for (const c of rangeFallback) { if (distractors.length >= 3) break; distractors.push(c); }
     }
 
     return {
@@ -162,6 +162,33 @@ export function generateQuiz(
       options: shuffle([entry.item, ...distractors]),
     };
   });
+
+  // Safety guard: when group range is provided, ensure no question or distractor
+  // leaks outside the selected groups (defensive — should already be true by
+  // construction, but keep as a hard guarantee for the user-visible promise).
+  if (groupIds && groupIds.length > 0) {
+    const allowed = new Set(groupIds);
+    for (let i = questions.length - 1; i >= 0; i--) {
+      const q = questions[i];
+      if (!allowed.has(q.correct.groupId)) {
+        questions.splice(i, 1);
+        continue;
+      }
+      // Ensure all distractor options are also in-range; if not, drop them and
+      // refill from in-range chars not already present in the question.
+      const inRange = q.options.filter((o) => allowed.has(o.groupId));
+      if (inRange.length < q.options.length) {
+        const present = new Set(inRange.map((o) => o.char));
+        const refill = shuffle(
+          chars.filter((c) => !present.has(c.char))
+        );
+        while (inRange.length < 4 && refill.length > 0) {
+          inRange.push(refill.shift()!);
+        }
+        q.options = shuffle(inRange.slice(0, 4));
+      }
+    }
+  }
 
   // Fix C: Enhanced consecutive duplicate prevention (forward + backward swap)
   for (let i = 1; i < questions.length; i++) {
@@ -202,13 +229,20 @@ export function generateQuiz(
  * Generate a 9-char listen grid using the same spaced-repetition priority
  * strategy as generateQuiz: new → due → easy-wrong → rest.
  * Also seeds the grid with confusable pairs to increase difficulty.
+ *
+ * @param progress Learned-chars set (used in all-learned mode)
+ * @param records  Spaced repetition records
+ * @param groupIds Optional: when provided, draw from chars in these groups instead of progress
  */
 export function generateListenGrid(
   progress: Set<string>,
   records: Record<string, CharRecord>,
+  groupIds?: string[],
 ): CharItem[] {
   const today = todayStr();
-  const pool = allChars.filter((c) => progress.has(c.char) && c.readings.length === 1);
+  const pool = groupIds && groupIds.length > 0
+    ? allChars.filter((c) => groupIds.includes(c.groupId) && c.readings.length === 1)
+    : allChars.filter((c) => progress.has(c.char) && c.readings.length === 1);
   if (pool.length < 9) return shuffle(pool);
 
   // Categorize with same priority buckets as quiz

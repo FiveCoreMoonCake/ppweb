@@ -3,7 +3,10 @@
 import React from "react";
 import { Volume2 } from "lucide-react";
 import type { CharItem } from "@/data/characters";
+import { charGroups } from "@/data/characters";
 import { speakChar } from "../lib/voice";
+
+const groupName = (id: string) => charGroups.find((g) => g.id === id)?.name ?? id;
 
 /**
  * Pinyin initial consonants (声母), longest first for correct prefix matching.
@@ -76,6 +79,12 @@ export function CharCard({ item, compact = false }: { item: CharItem; compact?: 
       <p className={`font-bold text-slate-800 ${compact ? "text-4xl" : "text-7xl sm:text-8xl"}`}>
         {item.char}
       </p>
+
+      {!compact && (
+        <span className="text-[11px] text-slate-400 font-medium -mt-1">
+          {groupName(item.groupId)}
+        </span>
+      )}
 
       <div className={`flex flex-col items-center ${compact ? "gap-1" : "gap-1.5"}`}>
         {item.readings.map((r, i) => (

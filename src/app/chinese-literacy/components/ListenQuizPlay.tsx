@@ -18,6 +18,7 @@ export function ListenQuizPlay({
   records,
   userId,
   onRecordsChange,
+  groupIds,
 }: {
   progress: Set<string>;
   onFinish: (result: ListenQuizResult, grid: CharItem[]) => void;
@@ -25,6 +26,7 @@ export function ListenQuizPlay({
   records: Record<string, CharRecord>;
   userId: string;
   onRecordsChange: (r: Record<string, CharRecord>) => void;
+  groupIds?: string[];
 }) {
   const [grid, setGrid] = useState<CharItem[]>([]);
   const [queue, setQueue] = useState<number[]>([]);
@@ -37,7 +39,7 @@ export function ListenQuizPlay({
 
   // Initialize grid and queue — Fix E: use Fisher-Yates shuffle
   useEffect(() => {
-    const chars = generateListenGrid(progress, records);
+    const chars = generateListenGrid(progress, records, groupIds);
     setGrid(chars);
     const order = shuffle(chars.map((_, i) => i));
     setQueue(order);
@@ -45,7 +47,7 @@ export function ListenQuizPlay({
     setSolved(new Set());
     setMistakes([]);
     setCurrentWrongTaps([]);
-  }, [progress]);
+  }, [progress, groupIds]);
 
   const targetGridIdx = queue[currentIdx];
   const targetChar = grid[targetGridIdx];

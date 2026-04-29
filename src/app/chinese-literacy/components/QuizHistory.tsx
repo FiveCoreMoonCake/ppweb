@@ -41,7 +41,7 @@ export function QuizHistory({
                 : "border-transparent text-slate-400 hover:text-slate-600"
             }`}
           >
-            🧩 测验模式
+            🧩 听音选字
           </button>
           <button
             onClick={() => setTab("listen")}

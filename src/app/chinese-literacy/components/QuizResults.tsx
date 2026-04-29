@@ -7,7 +7,7 @@ import type { CharItem } from "@/data/characters";
 import type { QuizAnswer } from "../lib/types";
 import { speakChar, speakReading } from "../lib/voice";
 import { playVictoryMusic } from "../lib/sound-effects";
-import { CharCard } from "./CharCard";
+import { CharCard, PinyinText } from "./CharCard";
 
 export function QuizResults({
   answers,
@@ -40,7 +40,7 @@ export function QuizResults({
         <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="font-bold text-slate-800 text-lg">测验结果</h1>
+        <h1 className="font-bold text-slate-800 text-lg">听音选字结果</h1>
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 max-w-lg mx-auto w-full">
@@ -99,22 +99,27 @@ export function QuizResults({
 
         <div className="mb-8">
           <h3 className="font-bold text-slate-700 mb-2">测验总结</h3>
-          <div className="flex flex-wrap gap-1.5">
+          <p className="text-xs text-slate-400 mb-3">点击字可听读音，打开字卡可看到出自哪一期</p>
+          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
             {answers.map((a) => {
-              const r = a.question.correct.readings[a.question.readingIdx];
+              const item = a.question.correct;
+              const r = item.readings[a.question.readingIdx];
               return (
                 <button
-                  key={a.question.correct.char + a.question.readingIdx}
-                  onClick={() => { speakChar(a.question.correct); setShowCard(a.question.correct); }}
-                  className={`px-2.5 py-1.5 rounded-lg border text-base font-bold transition-all hover:shadow-sm active:scale-95 ${
+                  key={item.char + a.question.readingIdx}
+                  onClick={() => { speakChar(item); setShowCard(item); }}
+                  className={`relative px-2 py-2 rounded-xl border-2 flex flex-col items-center gap-0.5 transition-all hover:shadow-sm active:scale-95 ${
                     a.isCorrect
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : "border-rose-200 bg-rose-50 text-rose-700"
+                      ? "border-emerald-200 bg-emerald-50"
+                      : "border-rose-200 bg-rose-50"
                   }`}
                   title={`${r.pinyin} ${r.words.join("、")}`}
                 >
-                  {a.question.correct.char}
-                  {a.isCorrect ? <Check className="w-3 h-3 inline ml-0.5 -mt-0.5" /> : <XIcon className="w-3 h-3 inline ml-0.5 -mt-0.5" />}
+                  <span className={`absolute top-0.5 right-0.5 ${a.isCorrect ? "text-emerald-500" : "text-rose-500"}`}>
+                    {a.isCorrect ? <Check className="w-3 h-3" /> : <XIcon className="w-3 h-3" />}
+                  </span>
+                  <PinyinText pinyin={r.pinyin} className="text-[11px] font-bold leading-none" />
+                  <span className={`text-2xl font-bold leading-tight ${a.isCorrect ? "text-emerald-700" : "text-rose-700"}`}>{item.char}</span>
                 </button>
               );
             })}

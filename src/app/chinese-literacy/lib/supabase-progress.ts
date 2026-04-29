@@ -39,6 +39,20 @@ export async function saveProgressChar(userId: string, char: string): Promise<vo
   if (error) console.error("[saveProgressChar]", error.message);
 }
 
+/**
+ * Clear "已学" status (and SR records) for a given set of characters.
+ * Used when the user wants to re-learn a group from scratch.
+ */
+export async function clearProgressChars(userId: string, chars: string[]): Promise<void> {
+  if (chars.length === 0) return;
+  const [{ error: e1 }, { error: e2 }] = await Promise.all([
+    supabase.from("literacy_progress").delete().eq("user_id", userId).in("char", chars),
+    supabase.from("literacy_records").delete().eq("user_id", userId).in("char", chars),
+  ]);
+  if (e1) console.error("[clearProgressChars:progress]", e1.message);
+  if (e2) console.error("[clearProgressChars:records]", e2.message);
+}
+
 /* ── Learning records (spaced repetition data) ── */
 
 export async function loadRecordsFromDB(userId: string): Promise<Record<string, CharRecord>> {

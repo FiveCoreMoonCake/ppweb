@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import { charGroups } from "@/data/characters";
 import { stopAll } from "../lib/voice";
-import { loadProgressFromDB, saveProgressChar } from "../lib/supabase-progress";
+import { loadProgressFromDB, saveProgressChar, clearProgressChars } from "../lib/supabase-progress";
 import { getConfusablePairs } from "../lib/confusables";
 import { getPrimaryWordPair } from "../lib/word-pairs";
 import { CharCard } from "./CharCard";
@@ -94,6 +94,20 @@ export function LearnMode({ onBack, userId }: { onBack: () => void; userId: stri
   const learnedInGroup = group.chars.filter((c) => learned.has(c.char)).length;
   const isLastCard = cardIdx === group.chars.length - 1;
   const hasNextGroup = groupIdx < charGroups.length - 1;
+
+  const resetGroup = async () => {
+    const chars = group.chars.map((c) => c.char);
+    const learnedHere = chars.filter((c) => learned.has(c));
+    if (learnedHere.length === 0) return;
+    if (!window.confirm(`确定要清空「${group.name}」的已学记录吗？\n\n将重置 ${learnedHere.length} 个字的学习状态和答题记录。`)) return;
+    setLearned((prev) => {
+      const next = new Set(prev);
+      for (const c of chars) next.delete(c);
+      return next;
+    });
+    setCardIdx(0);
+    await clearProgressChars(userId, chars);
+  };
 
   // Keyboard navigation
   useEffect(() => {
@@ -201,6 +215,15 @@ export function LearnMode({ onBack, userId }: { onBack: () => void; userId: stri
             <span className="font-semibold text-indigo-600">{group.name}</span>
             <span>·</span>
             <span>{learnedInGroup}/{group.chars.length} 已学</span>
+            {learnedInGroup > 0 && (
+              <button
+                onClick={resetGroup}
+                className="ml-2 text-[11px] px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 active:scale-95 transition-all font-semibold"
+                title={`清空${group.name}的已学记录，重新学习`}
+              >
+                🔄 重学本期
+              </button>
+            )}
           </div>
 
           <AnimatePresence mode="wait">

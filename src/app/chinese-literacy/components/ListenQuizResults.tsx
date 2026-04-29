@@ -7,7 +7,7 @@ import { allChars, type CharItem } from "@/data/characters";
 import type { ListenQuizResult } from "../lib/types";
 import { speakChar } from "../lib/voice";
 import { playVictoryMusic } from "../lib/sound-effects";
-import { CharCard } from "./CharCard";
+import { CharCard, PinyinText } from "./CharCard";
 
 export function ListenQuizResults({
   result,
@@ -134,22 +134,27 @@ export function ListenQuizResults({
 
         <div className="mb-8">
           <h3 className="font-bold text-slate-700 mb-2">测验总结</h3>
-          <div className="flex flex-wrap gap-1.5">
+          <p className="text-xs text-slate-400 mb-3">点击字可听读音</p>
+          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
             {grid.map((item) => {
               const hasMistake = result.mistakes.some((m) => m.target.char === item.char || m.wrongTaps.includes(item.char));
+              const r = item.readings[0];
               return (
                 <button
                   key={item.char}
                   onClick={() => speakChar(item)}
-                  className={`px-2.5 py-1.5 rounded-lg border text-base font-bold transition-all hover:shadow-sm active:scale-95 ${
+                  className={`relative px-2 py-2 rounded-xl border-2 flex flex-col items-center gap-0.5 transition-all hover:shadow-sm active:scale-95 ${
                     hasMistake
-                      ? "border-rose-200 bg-rose-50 text-rose-700"
-                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      ? "border-rose-200 bg-rose-50"
+                      : "border-emerald-200 bg-emerald-50"
                   }`}
-                  title={item.readings[0]?.pinyin + " " + item.readings[0]?.words.join("、")}
+                  title={r ? `${r.pinyin} ${r.words.join("、")}` : ""}
                 >
-                  {item.char}
-                  {hasMistake ? <XIcon className="w-3 h-3 inline ml-0.5 -mt-0.5" /> : <Check className="w-3 h-3 inline ml-0.5 -mt-0.5" />}
+                  <span className={`absolute top-0.5 right-0.5 ${hasMistake ? "text-rose-500" : "text-emerald-500"}`}>
+                    {hasMistake ? <XIcon className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                  </span>
+                  {r && <PinyinText pinyin={r.pinyin} className="text-[11px] font-bold leading-none" />}
+                  <span className={`text-2xl font-bold leading-tight ${hasMistake ? "text-rose-700" : "text-emerald-700"}`}>{item.char}</span>
                 </button>
               );
             })}

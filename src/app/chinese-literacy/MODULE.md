@@ -17,23 +17,24 @@ chinese-literacy/
 │   ├── voice.ts                # TTS/预录音频系统
 │   ├── confusables.ts          # 易混字对比数据 (35组)
 │   ├── word-pairs.ts           # 搭配词数据 (14组)
-│   ├── supabase-progress.ts    # Supabase 数据持久化
-│   ├── quiz-history.ts         # 测验/九格历史记录 (localStorage, 最近3次)
+│   ├── supabase-progress.ts    # Supabase 数据持久化（含 clearProgressChars）
+│   ├── quiz-history.ts         # 听音选字/九格历史记录 (localStorage, 最近3次)
 │   ├── spaced-repetition.ts    # 遗忘曲线算法
 │   ├── sound-effects.ts        # 音效合成
-│   └── quiz-engine.ts          # 智能出题引擎
+│   └── quiz-engine.ts          # 智能出题引擎（听音选字 + 九格顺选）
 └── components/                 # UI 组件层
     ├── CharCard.tsx             # 字卡 + 彩色拼音 (声母红/韵母蓝) + splitPinyin
     ├── CompareCard.tsx          # 易混字对比卡
     ├── WordPairCard.tsx         # 搭配词卡
-    ├── LearnMode.tsx            # 学习模式 (翻卡 + 分组导航 + 搭配词/易混字)
-    ├── QuizSettings.tsx         # 测验设置
-    ├── QuizPlay.tsx             # 测验答题 (2×2 选项 + 前后翻页 + 错题门禁)
-    ├── QuizResults.tsx          # 测验结果 (支持只读模式)
-    ├── ListenQuizSettings.tsx   # 九格顺选设置
+    ├── LearnMode.tsx            # 学习模式 (翻卡 + 分组导航 + 搭配词/易混字 + 重学本期)
+    ├── GroupRangeSelector.tsx   # 出题范围选择器（听音选字 / 九格顺选共享）
+    ├── QuizSettings.tsx         # 听音选字设置
+    ├── QuizPlay.tsx             # 听音选字答题 (2×2 选项 + 前后翻页 + 错题门禁)
+    ├── QuizResults.tsx          # 听音选字结果 (拼音 + 期号标记 + 可点击发音，支持只读模式)
+    ├── ListenQuizSettings.tsx   # 九格顺选设置（支持出题范围）
     ├── ListenQuizPlay.tsx       # 九格顺选 3×3 游戏
-    ├── ListenQuizResults.tsx    # 九格顺选结果 (支持只读模式)
-    ├── QuizHistory.tsx          # 历史结果列表 (tab: 测验/九格)
+    ├── ListenQuizResults.tsx    # 九格顺选结果 (拼音 + 期号标记 + 可点击发音，支持只读模式)
+    ├── QuizHistory.tsx          # 历史结果列表 (tab: 听音选字/九格)
     └── WrongList.tsx            # 易错字表 + 专项练习
 ```
 
@@ -41,10 +42,10 @@ chinese-literacy/
 
 ```
 Home（首页 5 张卡片）
-├── 🎴 学习模式 Learn
-├── 🧩 测验模式 QuizSettings → QuizPlay → QuizResults →历史
+├── 🎴 学习模式 Learn（可「重学本期」清空单期已学记录）
+├── 🧩 听音选字 QuizSettings → QuizPlay → QuizResults →历史
 ├── 🎮 九格顺选 ListenQuizSettings → ListenQuizPlay → ListenQuizResults →历史
-├── 📋 易错字表 WrongList → 可发起专项测验
+├── 📋 易错字表 WrongList → 可发起专项听音选字
 └── 🕑 历史结果 History → 只读 Results（返回历史）
 ```
 
@@ -82,7 +83,9 @@ interface CharGroup { id, name, chars: CharItem[] }
 | 3 | 易错字 | 正确率 < 50% 且答题 ≥ 3 | 25% |
 | 4 | 随机补充 | 其余字 | 10% |
 
-**出题范围**：自动使用 `progress`（已学字集合），无需手动选组。
+**出题范围**：两种模式
+- **已学内容**（默认）：使用 `progress`（已学字集合）
+- **按课选择**：选定期号后仅从该范围出题。在 by-group 模式下增加了 **范围保护守卫**：题目、干扰项、全局兑底均严格限制于选定 `groupIds`，防止题目超出范围。`generateListenGrid` 同样接收可选 `groupIds`。
 
 **技术细节**：
 - **Level 降权**：易错字桶内按 level 升序排列，level 0 优先
@@ -161,7 +164,13 @@ AudioContext 合成：答对/答错/胜利，无外部文件。
 
 ## 易错字表 (`WrongList.tsx`)
 
-筛选正确率 < 50% 且答题 ≥ 3 次的字，可发起专项测验。
+筛选正确率 < 50% 且答题 ≥ 3 次的字，可发起专项听音选字。
+
+## 重学本期 (LearnMode 中的 重学本期 按钮)
+
+- 在学习模式项目标题下方可见，仅当本期存在已学记录时出现。
+- 点击后弹窗确认。确认后：删除该期所有字的 `literacy_progress` 和 `literacy_records` 记录（`clearProgressChars`）。
+- 重学后该期字会以“新字”身份重新进入智能出题。
 
 ---
 
