@@ -10,6 +10,9 @@ import { playCorrectSound, playWrongSound } from "../lib/sound-effects";
 import { recordAnswerLocal } from "../lib/spaced-repetition";
 import { generateListenGrid } from "../lib/quiz-engine";
 import { shuffle } from "../lib/shuffle";
+import { charGroups } from "@/data/characters";
+
+const groupName = (id: string) => charGroups.find((g) => g.id === id)?.name ?? id;
 
 export function ListenQuizPlay({
   progress,
@@ -160,9 +163,10 @@ export function ListenQuizPlay({
                 disabled={isSolved}
                 animate={isShaking ? { x: [0, -8, 8, -8, 8, 0] } : {}}
                 transition={isShaking ? { duration: 0.4 } : {}}
-                className={`border-2 rounded-2xl aspect-square flex items-center justify-center font-bold text-3xl sm:text-4xl transition-all ${style} ${isSolved ? "opacity-60" : "active:scale-95"}`}
+                className={`relative border-2 rounded-2xl aspect-square flex flex-col items-center justify-center font-bold text-3xl sm:text-4xl transition-all ${style} ${isSolved ? "opacity-60" : "active:scale-95"}`}
               >
-                {item.char}
+                <span>{item.char}</span>
+                <span className="text-[10px] font-medium text-slate-400 leading-none mt-1">{groupName(item.groupId)}</span>
                 {isSolved && (
                   <Check className="w-5 h-5 text-emerald-500 absolute -top-1 -right-1" />
                 )}

@@ -7,6 +7,9 @@ import type { CharRecord, QuizQuestion, QuizAnswer } from "../lib/types";
 import { stopAll, playPrerecorded, speak, speakReading } from "../lib/voice";
 import { playCorrectSound, playWrongSound } from "../lib/sound-effects";
 import { recordAnswerLocal } from "../lib/spaced-repetition";
+import { charGroups } from "@/data/characters";
+
+const groupName = (id: string) => charGroups.find((g) => g.id === id)?.name ?? id;
 
 export function QuizPlay({
   questions,
@@ -216,6 +219,7 @@ export function QuizPlay({
                   className={`border-2 rounded-2xl py-3 sm:py-4 font-bold transition-all flex flex-col items-center gap-0.5 ${style}`}
                 >
                   <span className="text-4xl sm:text-5xl">{opt.char}</span>
+                  <span className="text-[10px] text-slate-400 font-medium leading-none">{groupName(opt.groupId)}</span>
                   {showDetail && (
                     <motion.div
                       initial={{ opacity: 0, y: -4 }}

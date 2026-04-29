@@ -338,6 +338,24 @@ export function generateListenGrid(
     }
   }
 
+  // Final sanity: when groupIds is provided, hard-filter any out-of-range chars
+  // (defensive — should never trip given pool is already filtered).
+  if (groupIds && groupIds.length > 0) {
+    const allowed = new Set(groupIds);
+    let result = picked.filter((c) => allowed.has(c.groupId));
+    if (result.length < 9) {
+      const seenChars = new Set(result.map((c) => c.char));
+      for (const item of shuffle(pool)) {
+        if (result.length >= 9) break;
+        if (seenChars.has(item.char)) continue;
+        if (!allowed.has(item.groupId)) continue;
+        result.push(item);
+        seenChars.add(item.char);
+      }
+    }
+    return shuffle(result.slice(0, 9));
+  }
+
   return shuffle(picked.slice(0, 9));
 }
 
