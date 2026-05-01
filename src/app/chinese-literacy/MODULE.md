@@ -123,6 +123,8 @@ level 5 答对 → mastered = true
 **LearnMode 行为**（关键）：
 - 当配对两字在同一组相邻时，`next()` / `prev()` 自动跳过配对字，避免词组卡重复
 - 查看词组卡时，**两个字同时标记为已学**（`learned` set 一次加两个）
+  - 🛡️ **孤儿字白名单保护**：只有同时存在于 `characters.ts` 全局字库中的搭档字才会被写入 Supabase。修复了「认识」的「认」、「害怕」的「害」等不在数据集中的字被错误计入学习进度，导致已学字数异常（如 301/300）的 Bug。
+  - 🧹 **自动清理孤儿数据**：`page.tsx` 与 `LearnMode.tsx` 加载 `progress` 后会扫描不在 `allChars` 中的字符，调用 `clearProgressChars` 一次性从 `literacy_progress` + `literacy_records` 中删除（修历史脏数据）。
 - 易混字对比按钮会**过滤掉与当前词组重叠的易混字对**（如看"朋友"时不显示朋↔友对比）
 
 **音频**：`wp_{word}.mp3` + `{char}_in_{word}.mp3` — Azure Speech XiaoxiaoNeural，SSML break 250ms/300ms（停顿紧凑）
@@ -165,6 +167,7 @@ AudioContext 合成：答对/答错/胜利，无外部文件。
 ## 易错字表 (`WrongList.tsx`)
 
 筛选正确率 < 50% 且答题 ≥ 3 次的字，可发起专项听音选字。
+- 每个错字卡片大字下方显示所属的「第N期」灰色小标签（与听音选字 / 九格答题中字卡的标记一致），便于溯源是否超出选定出题范围。
 
 ## 重学本期 (LearnMode 中的 重学本期 按钮)
 
